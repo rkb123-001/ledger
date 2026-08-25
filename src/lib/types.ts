@@ -65,6 +65,22 @@ export interface ProductionCost {
   created_at: string;
 }
 
+/**
+ * A named, reusable set of rate card lines (migration 006).
+ * The line shape itself lives in lib/rateblocks.ts alongside the
+ * functions that build and apply it.
+ */
+export interface RateBlock {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  lines: import("./rateblocks").RateBlockLine[];
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CostBreakdownLine {
   description: string;
   amount: number;

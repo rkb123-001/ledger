@@ -80,54 +80,20 @@ create policy "order_quotes_delete_own" on public.budget_order_quotes
   for delete using (auth.uid() = user_id);
 
 -- =============================================================
--- SEED DEFAULT PRODUCTION COSTS
+-- NO RATE CARD IS SEEDED HERE, DELIBERATELY
 -- =============================================================
--- Replace YOUR_USER_ID_HERE with your auth.users.id, then run.
--- Skip this block if you'd rather start with an empty rate card.
-
-do $$
-declare
-  v_user_id uuid := 'YOUR_USER_ID_HERE'::uuid;
-begin
-  -- Casting
-  insert into public.budget_production_costs (user_id, category, description, cost_low, cost_high, pot_name, sort_order) values
-    (v_user_id, 'Casting', 'Silver pendant casting (small/medium)', 35, 40, 'Casters', 1),
-    (v_user_id, 'Casting', 'Silver ring casting', 25, 35, 'Casters', 2),
-    (v_user_id, 'Casting', 'Silver earring casting (per pair)', 30, 40, 'Casters', 3),
-    (v_user_id, 'Casting', 'Silver brooch/pin casting', 30, 35, 'Casters', 4),
-    (v_user_id, 'Casting', 'Silver locket casting (large)', 40, 60, 'Casters', 5),
-    (v_user_id, 'Casting', '9ct white gold casting (small piece)', 150, 250, 'Casters', 6),
-    (v_user_id, 'Casting', '9ct white gold casting (large piece)', 400, 700, 'Casters', 7);
-
-  -- Hallmarking
-  insert into public.budget_production_costs (user_id, category, description, cost_low, cost_high, pot_name, sort_order) values
-    (v_user_id, 'Hallmarking', 'Silver hallmark (standard)', 10, 10, 'Hallmarking', 8),
-    (v_user_id, 'Hallmarking', 'Gold hallmark (standard)', 30, 40, 'Hallmarking', 9),
-    (v_user_id, 'Hallmarking', 'Gold hallmark (next day)', 60, 60, 'Hallmarking', 10);
-
-  -- Plating
-  insert into public.budget_production_costs (user_id, category, description, cost_low, cost_high, pot_name, sort_order) values
-    (v_user_id, 'Plating', 'Gold vermeil plating (small piece)', 40, 50, 'Plating', 11),
-    (v_user_id, 'Plating', 'Gold vermeil plating (medium piece)', 50, 70, 'Plating', 12),
-    (v_user_id, 'Plating', 'Silver plating', 25, 30, 'Plating', 13),
-    (v_user_id, 'Plating', 'Gold plating (Thursday Child style)', 50, 50, 'Plating', 14);
-
-  -- Materials
-  insert into public.budget_production_costs (user_id, category, description, cost_low, cost_high, pot_name, sort_order) values
-    (v_user_id, 'Materials', 'Delicate silver chain (per piece)', 8, 12, 'Hatton Garden materials', 15),
-    (v_user_id, 'Materials', 'Silver belcher chain thick (46cm)', 75, 80, 'Hatton Garden materials', 16),
-    (v_user_id, 'Materials', 'Silver box chain delicate', 8, 12, 'Hatton Garden materials', 17),
-    (v_user_id, 'Materials', 'Gold rolled chain', 12, 18, 'Hatton Garden materials', 18),
-    (v_user_id, 'Materials', 'Silver findings/components (small)', 2, 6, 'Hatton Garden materials', 19),
-    (v_user_id, 'Materials', 'Presentation packaging', 10, 15, 'Hatton Garden materials', 20);
-
-  -- Labour / overheads (notional, applied as flat add-on)
-  insert into public.budget_production_costs (user_id, category, description, cost_low, cost_high, pot_name, notes, sort_order) values
-    (v_user_id, 'Labour', 'Studio time per piece (hand-finishing)', 20, 40, null, 'Add per piece, varies with complexity', 21),
-    (v_user_id, 'Labour', 'Hand-engraving (small)', 30, 60, null, 'For engraved lockets, plates', 22);
-
-  -- Margin defaults
-  insert into public.budget_production_costs (user_id, category, description, cost_low, cost_high, pot_name, notes, sort_order) values
-    (v_user_id, 'Margin', 'Standard retail multiplier', 4, 4, null, '4x production cost is standard for jewellery wholesale-to-retail', 23),
-    (v_user_id, 'Margin', 'Direct-to-consumer multiplier', 5, 6, null, 'For DTC pieces with full retail margin', 24);
-end $$;
+-- budget_production_costs is created empty and stays empty until
+-- someone puts their own rates in it. The categories on a rate card
+-- are the names a practice uses for its own work, so shipping a set
+-- would mean every install inherited one practice's vocabulary and
+-- then had to argue with it.
+--
+-- Three ways to start a card, none of them automatic:
+--
+--   1. Build categories directly in the app. They are renameable at
+--      any time, and renaming moves every rate inside them.
+--   2. Apply a rate block (migration 006), if you have one saved or
+--      have been given one.
+--   3. Adapt an example. supabase/examples/ holds one working
+--      practice's card as a starting point. It is not run by any
+--      migration and has to be pasted deliberately.

@@ -4,6 +4,7 @@ import type { BudgetPot, ProductionCost, Project } from "../lib/types";
 import { fmt } from "../lib/format";
 import { allocateFromRate } from "../lib/predict";
 import type { RatePoint } from "../lib/predict";
+import { RateBlocks } from "./RateBlocks";
 
 interface ProductionCostsProps {
   pots: BudgetPot[];
@@ -61,6 +62,8 @@ export function ProductionCosts({
   const [costs, setCosts] = useState<ProductionCost[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState("");
   const [addingId, setAddingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AddDraft | null>(null);
   const [addError, setAddError] = useState("");
@@ -293,6 +296,59 @@ export function ProductionCosts({
     onAdded();
   }
 
+  /**
+   * Rename a category across every rate inside it.
+   *
+   * Categories are the names a practice uses for its own work, so
+   * they have to be editable in one move rather than row by row.
+   * Renaming onto a name that already exists merges the two, which is
+   * usually what someone means by it — but it is destructive of the
+   * distinction, so it is confirmed rather than assumed.
+   */
+  async function renameCategory(from: string, raw: string) {
+    setRenamingCategory(null);
+    const to = raw.trim();
+    if (!to || to === from) return;
+
+    const moving = costs.filter((c) => c.category === from).length;
+    const merging = costs.some((c) => c.category === to);
+    if (
+      merging &&
+      !window.confirm(
+        `"${to}" already exists. Renaming moves these ${moving} rate${
+          moving === 1 ? "" : "s"
+        } into it, and the two categories become one.`
+      )
+    ) {
+      return;
+    }
+
+    setPanelError("");
+    await flushPending();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setPanelError("Not signed in.");
+      return;
+    }
+
+    // Optimistic: the regroup is instant, the write catches up.
+    setCosts((prev) =>
+      prev.map((c) => (c.category === from ? { ...c, category: to } : c))
+    );
+
+    const { error } = await supabase
+      .from("budget_production_costs")
+      .update({ category: to })
+      .eq("category", from)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setPanelError("Could not rename that category: " + error.message);
+      void fetchCosts();
+    }
+  }
+
   async function handleClose() {
     await flushPending();
     onClose();
@@ -313,17 +369,62 @@ export function ProductionCosts({
           <button className="settings-close" onClick={handleClose}>×</button>
         </div>
         <div className="settings-description">
-          Your typical production rates. The order costing tool uses these to
-          estimate budgets when you upload a client order, and <strong>+ Add</strong>
-          {" "}puts any single rate straight into a pot, on a project if you pick one.
+          Your rates, under whatever names you use for your own work. Click a
+          category to rename it; every rate inside moves with it. The order
+          costing tool reads this card, and <strong>+ Add</strong> puts a single
+          rate straight into a pot, on a project if you pick one.
         </div>
 
+        {panelError && <div className="cost-add-warning">{panelError}</div>}
+
         {loading && <div className="loading">Loading...</div>}
+
+        {!loading && costs.length === 0 && (
+          <p className="blocks-empty">
+            Your rate card is empty, which is where everyone starts. Add a
+            category below and name it after the work you actually do — or apply
+            a block, if you have one saved.
+          </p>
+        )}
+
+        {/* Existing names, so moving one rate to another category autocompletes
+            rather than inviting a near-miss that silently makes a new group. */}
+        <datalist id="rate-card-categories">
+          {Object.keys(grouped).map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
 
         {!loading &&
           Object.entries(grouped).map(([category, rows]) => (
             <div key={category} className="cost-group">
-              <h3 className="cost-group-title">{category}</h3>
+              {renamingCategory === category ? (
+                <input
+                  className="cost-group-title-edit"
+                  autoFocus
+                  defaultValue={category}
+                  aria-label={`Rename the ${category} category`}
+                  onBlur={(e) => void renameCategory(category, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setRenamingCategory(null);
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  className="cost-group-title"
+                  onClick={() => setRenamingCategory(category)}
+                  title="Rename this category"
+                >
+                  {category}
+                  <span className="cost-group-count">
+                    {rows.length} rate{rows.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+              )}
               {rows.map((cost) => {
                 const isEditing = editingId === cost.id;
                 return (
@@ -390,7 +491,9 @@ export function ProductionCosts({
                       </select>
                       <input
                         className="cost-category"
+                        list="rate-card-categories"
                         placeholder="Category"
+                        title="Move just this rate to another category"
                         value={cost.category}
                         onChange={(e) => updateLocal(cost.id, { category: e.target.value })}
                         onBlur={() => void flushPending()}
@@ -567,6 +670,14 @@ export function ProductionCosts({
         <button className="add-pot-btn" onClick={addNewCategory} style={{ marginTop: 16 }}>
           + Add new category
         </button>
+
+        {!loading && (
+          <RateBlocks
+            costs={costs}
+            onBeforeAction={flushPending}
+            onApplied={fetchCosts}
+          />
+        )}
       </div>
     </div>
   );
