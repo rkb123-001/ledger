@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   rollUpRange,
+  allocateFromRate,
   calibrate,
   confidenceFromSamples,
   predictProductionCost,
@@ -27,6 +28,62 @@ describe("rollUpRange", () => {
 
   it("returns a zero range for no lines", () => {
     expect(rollUpRange([])).toEqual({ low: 0, high: 0 });
+  });
+});
+
+describe("allocateFromRate", () => {
+  it("commits the midpoint by default", () => {
+    const a = allocateFromRate({ cost_low: 30, cost_high: 40 });
+    expect(a.point).toBe("mid");
+    expect(a.unit).toBe(35);
+    expect(a.amount).toBe(35);
+    expect(a.quantity).toBe(1);
+  });
+
+  it("commits either end when asked", () => {
+    const line = { cost_low: 30, cost_high: 40 };
+    expect(allocateFromRate(line, { point: "low" }).amount).toBe(30);
+    expect(allocateFromRate(line, { point: "high" }).amount).toBe(40);
+  });
+
+  it("multiplies by quantity", () => {
+    expect(allocateFromRate({ cost_low: 12.5, cost_high: 12.5 }, { quantity: 4 }).amount).toBe(50);
+  });
+
+  it("flags anything drawn from a spread as an estimate", () => {
+    expect(allocateFromRate({ cost_low: 30, cost_high: 40 }).isEstimate).toBe(true);
+    // Even at the ends: the range is what makes it a guess, not the pick.
+    expect(allocateFromRate({ cost_low: 30, cost_high: 40 }, { point: "high" }).isEstimate).toBe(true);
+  });
+
+  it("treats a settled price as a fact rather than an estimate", () => {
+    expect(allocateFromRate({ cost_low: 12, cost_high: 12 }).isEstimate).toBe(false);
+    // A zero is an unfilled cell, not a free input.
+    expect(allocateFromRate({ cost_low: 0, cost_high: 0 }).isEstimate).toBe(true);
+  });
+
+  it("survives a rate card row entered the wrong way round", () => {
+    const a = allocateFromRate({ cost_low: 90, cost_high: 10 }, { point: "low" });
+    expect(a.amount).toBe(10);
+    expect(allocateFromRate({ cost_low: 90, cost_high: 10 }, { point: "high" }).amount).toBe(90);
+  });
+
+  it("never puts a NaN or a fractional count into a budget", () => {
+    expect(allocateFromRate({ cost_low: NaN, cost_high: 40 }).amount).toBe(20);
+    expect(allocateFromRate({ cost_low: 30, cost_high: 40 }, { quantity: 2.7 }).quantity).toBe(2);
+    expect(allocateFromRate({ cost_low: 30, cost_high: 40 }, { quantity: 0 }).quantity).toBe(1);
+    expect(allocateFromRate({ cost_low: 30, cost_high: 40 }, { quantity: NaN }).quantity).toBe(1);
+  });
+
+  it("warns rather than silently committing an uncosted rate", () => {
+    expect(allocateFromRate({ cost_low: 0, cost_high: 0 }).warnings).toHaveLength(1);
+  });
+
+  it("warns when the midpoint is being taken from a very wide range", () => {
+    expect(allocateFromRate({ cost_low: 10, cost_high: 90 }).warnings).toHaveLength(1);
+    expect(allocateFromRate({ cost_low: 30, cost_high: 40 }).warnings).toHaveLength(0);
+    // Picking an end is a deliberate choice, so it is not second-guessed.
+    expect(allocateFromRate({ cost_low: 10, cost_high: 90 }, { point: "high" }).warnings).toHaveLength(0);
   });
 });
 
@@ -61,9 +118,9 @@ describe("predictProductionCost", () => {
   it("quotes the midpoint of the calibrated range", () => {
     const p = predictProductionCost(
       [
-        { cost_low: 35, cost_high: 40 }, // pendant casting
-        { cost_low: 10, cost_high: 10 }, // silver hallmark
-        { cost_low: 8, cost_high: 12 },  // chain
+        { cost_low: 35, cost_high: 40 }, // fabrication, quoted as a range
+        { cost_low: 10, cost_high: 10 }, // an outside service at a fixed price
+        { cost_low: 8, cost_high: 12 },  // materials
       ],
       1.2,
       6
@@ -96,7 +153,7 @@ describe("suggestRetail", () => {
 
   it("warns when too few cost lines suggest something was forgotten", () => {
     expect(suggestRetail(40, 4, { lineCount: 2 }).warnings.join(" ")).toMatch(
-      /Hallmarking, chain and packaging/
+      /Outside services, consumables and packaging/
     );
   });
 

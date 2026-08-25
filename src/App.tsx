@@ -1076,7 +1076,12 @@ export default function App() {
       )}
 
       {showProductionCosts && (
-        <ProductionCosts pots={pots} onClose={() => setShowProductionCosts(false)} />
+        <ProductionCosts
+          pots={pots}
+          projects={projects}
+          onAdded={fetchAll}
+          onClose={() => setShowProductionCosts(false)}
+        />
       )}
     </div>
   );

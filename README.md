@@ -1,8 +1,8 @@
 # Ledger
 
-Project budgeting, multi-account tracking, and costing prediction for a working jewellery practice.
+Project budgeting, multi-account tracking, and costing prediction for an independent practice — artist, designer, researcher, anyone whose income arrives in irregular lumps against work that has to be costed before it is priced.
 
-Ledger answers three questions that a general-purpose budgeting app cannot: what a given commission will actually cost to produce, where money already received is committed before it is spent, and whether a project in flight is going to land inside its budget. It runs as an installed app on a phone, against a single-user Postgres database.
+Ledger answers three questions that a general-purpose budgeting app cannot: what a given piece of work will actually cost to produce, where money already received is committed before it is spent, and whether a project in flight is going to land inside its budget. It runs as an installed app on a phone, against a single-user Postgres database.
 
 Live at `budget.rebekahkosonenbide.com`. Single user by design.
 
@@ -20,7 +20,9 @@ Roles are positional rather than hardcoded. The first active spendable account i
 
 A project without a budget is tracked but not capped, and reports `No budget set` rather than a fabricated percentage.
 
-**Order costing.** Per-commission costing built from a rate card of materials, casting, hallmarking, plating and labour, each stored as a low/high range because those prices genuinely vary per job. The result is a production subtotal, a margin multiplier, and a suggested retail price with warnings.
+**Order costing.** Per-job costing built from a rate card the practice defines for itself — materials, fabrication, outside services, finishing, labour, whatever the work actually consumes. Every entry is stored as a low/high range rather than a fixed price, because these are the costs that genuinely vary per job. The result is a production subtotal, a margin multiplier, and a suggested retail price with warnings.
+
+**Committing a single rate.** Not every cost arrives as a whole order. Any line on the rate card can be put straight into a pot from the rate card itself, assigned to a project if one is picked, without going through a quote first. Because the card holds ranges and a pot item holds one number, the control asks which end of the range is being committed to — low, mid or high, each shown as the actual figure at the chosen quantity — rather than collapsing the range silently. Anything drawn from a spread lands flagged as an estimate; a settled price, where low and high agree, lands as a fact. The project defaults to whichever was used last, because costing a job in practice means adding several rates in one sitting.
 
 **Costing prediction.** Described in its own section below.
 
@@ -32,7 +34,7 @@ A project without a budget is tracked but not capped, and reports `No budget set
 
 A quote is a range, not a number, because the rate card stores every input as a low/high pair. Two things happen to that range.
 
-**It is calibrated against history.** Estimates drift in a consistent direction for a given maker. `budget_prediction_factor()` measures that drift as the median ratio of actual to quoted production cost across closed jobs. Above 1 means work has historically cost more than quoted, so new quotes are scaled up.
+**It is calibrated against history.** Estimates drift in a consistent direction for a given practice. `budget_prediction_factor()` measures that drift as the median ratio of actual to quoted production cost across closed jobs. Above 1 means work has historically cost more than quoted, so new quotes are scaled up.
 
 Three properties of that function matter more than the arithmetic:
 
@@ -42,7 +44,9 @@ Three properties of that function matter more than the arithmetic:
 
 **Only the uncertain part is adjusted.** When predicting where a project will land, amounts already paid are facts and are never touched by the factor. Only the still-estimated portion is scaled. This keeps predictions from drifting on projects that are nearly closed, where most of the spend is already known.
 
-The maths lives in `src/lib/predict.ts` as pure functions with no React, no database, and no clock. That is deliberate: this is the part of the app where being wrong costs real money, so it is the part that is directly testable. `npm test` runs 18 cases over it, including the degenerate ones (zero multiplier, non-finite factor, fully-paid project, uncapped budget).
+The maths lives in `src/lib/predict.ts` as pure functions with no React, no database, and no clock. That is deliberate: this is the part of the app where being wrong costs real money, so it is the part that is directly testable. `npm test` runs 27 cases over it, including the degenerate ones (zero multiplier, non-finite factor, fully-paid project, uncapped budget, a rate card row typed in the wrong order).
+
+Collapsing a rate card range into one committable figure is part of that same surface, so it lives there too rather than in a click handler. `allocateFromRate()` decides what a range plus a quantity is worth, and whether the result should still count as an estimate — which matters downstream, because the calibration above only ever adjusts the estimated portion of a project's spend.
 
 ---
 
@@ -50,7 +54,7 @@ The maths lives in `src/lib/predict.ts` as pure functions with no React, no data
 
 **A model may read but may not write.** Screenshot parsing is useful and is also wrong often enough that trusting it silently would corrupt the ledger over months in ways that are expensive to unpick. Routing every parse through a drafts table and a human review step keeps the speed and confines the error surface to a queue that is visibly pending.
 
-**Allocation happens on receipt.** A single balance figure invites a practice to spend money already owed to materials, tax, or an undelivered commission. Pots make the commitment structural rather than remembered.
+**Allocation happens on receipt.** A single balance figure invites a practice to spend money already owed to materials, tax, or work not yet delivered. Pots make the commitment structural rather than remembered.
 
 **Scope discipline.** This is explicitly a single-user tool. The signup form is hidden, only one hardcoded address can authenticate, and every table carries a row-level security policy restricting access to `auth.uid()`. Building it for one user meant the security model could be simple enough to actually verify, which is a better outcome than a general multi-tenant design nobody audits.
 

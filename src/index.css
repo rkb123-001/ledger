@@ -1147,6 +1147,132 @@ button {
   margin-left: auto;
 }
 
+/* -------------------------------------------------------------
+   Adding a rate card line straight into a pot or a project.
+   ------------------------------------------------------------- */
+
+.cost-add-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--secondary);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cost-add-btn:hover:not(:disabled) {
+  background: var(--info-bg);
+  color: var(--info-text);
+  border-color: var(--info-text);
+}
+
+.cost-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cost-add-strip {
+  margin-top: 8px;
+  padding: 10px;
+  border: 0.5px solid var(--info-text);
+  border-radius: 8px;
+  background: var(--info-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cost-add-points {
+  display: flex;
+  gap: 6px;
+}
+
+.cost-add-point {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 4px;
+  font-size: 11px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cost-add-point strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.cost-add-point.is-selected {
+  border-color: var(--info-text);
+  box-shadow: inset 0 0 0 1px var(--info-text);
+}
+
+.cost-add-fields {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cost-add-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cost-add-field input,
+.cost-add-field select {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.cost-add-field input {
+  width: 60px;
+  text-align: right;
+}
+
+.cost-add-warning {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.cost-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cost-add-note {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.cost-add-receipt {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
 /* =============================================================
    Accounts panel and projects panel (migration 005)
    Uses the existing tokens only, so both inherit light and dark

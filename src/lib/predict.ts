@@ -2,13 +2,14 @@
  * Costing prediction.
  *
  * The rate card stores every production input as a low/high range rather
- * than a single figure, because casting, plating and hallmarking prices
- * genuinely vary per job. A quote is therefore a range, not a number.
+ * than a single figure, because the costs a practice actually meets —
+ * materials, outside services, finishing, studio time — genuinely vary
+ * per job. A quote is therefore a range, not a number.
  *
  * Two things then happen to that range:
  *
  *   1. It is calibrated against history. Estimates drift in a consistent
- *      direction for a given maker, so the median ratio of actual to
+ *      direction for a given practice, so the median ratio of actual to
  *      quoted cost across closed jobs is applied as a correction. That
  *      factor comes from budget_prediction_factor() in migration 005 and
  *      is 1.0 until at least three jobs have closed.
@@ -31,6 +32,21 @@ export interface RateCardLine {
   cost_low: number;
   cost_high: number;
   quantity?: number;
+}
+
+/** Which end of a rate card range to commit to. */
+export type RatePoint = "low" | "mid" | "high";
+
+export interface RateAllocation {
+  /** The per-unit figure taken from the range. */
+  unit: number;
+  quantity: number;
+  /** unit x quantity: the figure written to the budget item. */
+  amount: number;
+  point: RatePoint;
+  /** False only when the range is a single settled price. */
+  isEstimate: boolean;
+  warnings: string[];
 }
 
 export type Confidence = "none" | "low" | "medium" | "high";
@@ -93,6 +109,67 @@ export function rollUpRange(lines: RateCardLine[]): CostRange {
     },
     { low: 0, high: 0 }
   );
+}
+
+/**
+ * Turn one rate card line into one committable amount.
+ *
+ * The rate card holds ranges; a pot item holds a single number. Something
+ * has to collapse the one into the other, and doing it in the click
+ * handler is how a range quietly becomes a figure nobody can account for
+ * later. So it happens here, where it can be tested and where the two
+ * decisions it makes are visible:
+ *
+ *   - which end of the range is being committed to, stated rather than
+ *     assumed, because "low" and "high" are different promises;
+ *   - whether the result is still an estimate. Anything drawn from a
+ *     spread is a guess and stays flagged, because the project
+ *     calibration only ever adjusts the estimated portion of spend. A
+ *     settled price, where low and high agree, is a fact and is not.
+ *
+ * The rate card is hand-edited, so this is defensive about what it finds
+ * there: a reversed pair, a blank cell or a fractional quantity all
+ * resolve to something sane rather than to NaN in a budget.
+ */
+export function allocateFromRate(
+  line: { cost_low: number; cost_high: number },
+  opts: { point?: RatePoint; quantity?: number } = {}
+): RateAllocation {
+  const point = opts.point ?? "mid";
+
+  const rawQuantity = Number(opts.quantity ?? 1);
+  const quantity =
+    Number.isFinite(rawQuantity) && rawQuantity >= 1 ? Math.floor(rawQuantity) : 1;
+
+  const a = Number(line.cost_low);
+  const b = Number(line.cost_high);
+  const first = Number.isFinite(a) ? a : 0;
+  const second = Number.isFinite(b) ? b : 0;
+  const low = Math.min(first, second);
+  const high = Math.max(first, second);
+
+  const unit = round2(
+    point === "low" ? low : point === "high" ? high : (low + high) / 2
+  );
+  const amount = round2(unit * quantity);
+
+  const warnings: string[] = [];
+  if (amount <= 0) {
+    warnings.push("This rate is still zero. Put a figure on the rate card first.");
+  } else if (point === "mid" && high - low > unit) {
+    warnings.push(
+      "This rate spans more than its own midpoint. Commit the high end unless you have a reason not to."
+    );
+  }
+
+  return {
+    unit,
+    quantity,
+    amount,
+    point,
+    isEstimate: !(low === high && low > 0),
+    warnings,
+  };
 }
 
 /**
@@ -168,7 +245,7 @@ export function suggestRetail(
   }
   if (opts.lineCount !== undefined && opts.lineCount > 0 && opts.lineCount < 3) {
     warnings.push(
-      "Fewer than three cost lines. Hallmarking, chain and packaging are the ones usually forgotten."
+      "Fewer than three cost lines. Outside services, consumables and packaging are the ones usually forgotten."
     );
   }
   if (

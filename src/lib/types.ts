@@ -24,7 +24,14 @@ export interface BudgetItem {
   user_id: string;
   label: string;
   amount: number;
+  paid: boolean;
   is_estimate: boolean;
+  /**
+   * Added by migration 005 and optional on purpose: against a database
+   * that has not been migrated the column is simply absent, and the app
+   * is built to keep working in that state rather than throw.
+   */
+  project_id?: string | null;
   sort_order: number;
   created_at: string;
 }
