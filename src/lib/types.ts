@@ -24,6 +24,11 @@ export interface BudgetItem {
   user_id: string;
   label: string;
   amount: number;
+  /**
+   * Estimated studio hours (migration 009). Optional for the same reason as
+   * the migration 005 fields: an unmigrated database simply lacks the column.
+   */
+  hours?: number;
   paid: boolean;
   is_estimate: boolean;
   /**
@@ -88,12 +93,34 @@ export interface CostBreakdownLine {
   is_estimate: boolean;
 }
 
+export type CatalogueMatchConfidence = "exact" | "likely" | "loose";
+
+export interface CatalogueMatch {
+  title: string;
+  variant_title: string | null;
+  listed_price: number;
+  handle: string | null;
+  confidence: CatalogueMatchConfidence;
+}
+
 export interface CostedPiece {
   name: string;
   quantity: number;
   notes: string;
   breakdown: CostBreakdownLine[];
   production_cost: number;
+  catalogue_match?: CatalogueMatch | null;
+}
+
+export interface CatalogueItem {
+  id: string;
+  user_id: string;
+  title: string;
+  variant_title: string | null;
+  price: number;
+  handle: string | null;
+  status: string;
+  last_synced_at: string | null;
 }
 
 export interface CostingResult {
@@ -103,6 +130,8 @@ export interface CostingResult {
   production_subtotal: number;
   margin_multiplier: number;
   suggested_retail: number;
+  listed_total?: number | null;
+  margin_on_listed?: number | null;
   warnings: string[];
 }
 

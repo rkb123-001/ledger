@@ -70,7 +70,7 @@ export function ScreenshotUpload({ onParsed }: UploadProps) {
     <div className="upload-section">
       <div className="upload-title">Add from screenshot</div>
       <div className="upload-description">
-        Upload a screenshot of your task list. Items will appear as drafts to review before being added.
+        Add a list of calculated items that need sorting into your budget. They appear as drafts to review before anything is added.
       </div>
       <input
         ref={fileInputRef}

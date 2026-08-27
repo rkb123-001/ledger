@@ -320,6 +320,24 @@ export function PotCard({
                     onBlur={() => commitItemAmountDraft(item)}
                   />
 
+                  <input
+                    className="item-hours-input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0h"
+                    title="Estimated studio hours"
+                    value={
+                      item.hours ? String(item.hours) : ""
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, "");
+                      const parsed = raw === "" ? 0 : parseFloat(raw);
+                      onUpdateItem(item.id, {
+                        hours: Number.isFinite(parsed) ? parsed : 0,
+                      });
+                    }}
+                  />
+
                   <button
                     className="item-delete"
                     onClick={() => onDeleteItem(item.id)}

@@ -11,6 +11,8 @@ interface OrderCostingProps {
 type Stage = "idle" | "uploading" | "reviewing" | "saving";
 
 export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
+  const [syncing, setSyncing] = useState(false);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState("");
@@ -29,6 +31,39 @@ export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
     setClientName("");
     setOrderRef("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  // Catalogue sync. Kept here because this is the only screen where a stale
+  // catalogue actually changes what you see.
+  async function syncCatalogue() {
+    setSyncing(true);
+    setSyncNote(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not signed in");
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const res = await fetch(`${supabaseUrl}/functions/v1/sync-catalogue`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setSyncNote(body.hint ?? body.detail ?? body.error ?? "Sync failed");
+        return;
+      }
+      setSyncNote(
+        body.synced
+          ? `Synced ${body.synced} variants across ${body.products} products.`
+          : body.note ?? "Nothing to sync."
+      );
+    } catch (err) {
+      setSyncNote(String(err));
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function handleFile(file: File) {
@@ -89,6 +124,20 @@ export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
 
   const productionSubtotal = calcSubtotal(editedPieces);
   const suggestedRetail = Math.ceil((productionSubtotal * marginMultiplier) / 5) * 5;
+
+  // Listed totals are derived here rather than trusted from the model, so they
+  // stay correct when quantities are edited in the review panel.
+  const matchedPieces = editedPieces.filter((p) => p.catalogue_match);
+  const listedTotal = matchedPieces.length
+    ? matchedPieces.reduce(
+        (sum, p) => sum + (p.catalogue_match?.listed_price ?? 0) * (p.quantity || 1),
+        0
+      )
+    : null;
+  const marginOnListed =
+    listedTotal && productionSubtotal > 0 ? listedTotal / productionSubtotal : null;
+  const allPiecesMatched =
+    editedPieces.length > 0 && matchedPieces.length === editedPieces.length;
 
   function updatePiece(pieceIdx: number, patch: Partial<CostedPiece>) {
     setEditedPieces((prev) => prev.map((p, i) => (i === pieceIdx ? { ...p, ...patch } : p)));
@@ -253,6 +302,15 @@ export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
         >
           Upload order screenshot
         </button>
+        <button
+          className="upload-button secondary"
+          onClick={syncCatalogue}
+          disabled={syncing}
+          style={{ marginTop: 8 }}
+        >
+          {syncing ? "Syncing catalogue…" : "Sync catalogue from Shopify"}
+        </button>
+        {syncNote && <div className="upload-status">{syncNote}</div>}
         {error && <div className="upload-status upload-error">{error}</div>}
       </div>
     );
@@ -319,8 +377,21 @@ export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
           0
         );
         const lineTotal = pieceTotal * piece.quantity;
+        const match = piece.catalogue_match;
         return (
           <div key={pi} className="costing-piece">
+            {match && (
+              <div className={`catalogue-match confidence-${match.confidence}`}>
+                <span className="catalogue-match-label">
+                  Listed piece{match.confidence !== "exact" ? ` · ${match.confidence} match` : ""}
+                </span>
+                <span className="catalogue-match-title">
+                  {match.title}
+                  {match.variant_title ? ` · ${match.variant_title}` : ""}
+                </span>
+                <span className="catalogue-match-price">{fmt(match.listed_price)}</span>
+              </div>
+            )}
             <div className="costing-piece-header">
               <input
                 className="costing-piece-name"
@@ -413,10 +484,56 @@ export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
           />
         </div>
         <div className="costing-summary-row" style={{ fontSize: 18 }}>
-          <span>Suggested retail</span>
+          <span>{listedTotal === null ? "Suggested retail" : "Suggested retail (from costs)"}</span>
           <strong style={{ color: "var(--success-text)" }}>{fmt(suggestedRetail)}</strong>
         </div>
       </div>
+
+      {listedTotal !== null && (
+        <div className="costing-summary" style={{ marginTop: 12 }}>
+          <div className="costing-summary-row">
+            <span>
+              {allPiecesMatched ? "Listed price" : "Listed price (matched pieces)"}
+            </span>
+            <strong>{fmt(listedTotal)}</strong>
+          </div>
+          <div className="costing-summary-row">
+            <span>Margin on listed price</span>
+            <strong
+              style={{
+                color:
+                  marginOnListed && marginOnListed < 3
+                    ? "var(--danger-text)"
+                    : "var(--success-text)",
+              }}
+            >
+              {marginOnListed ? `${marginOnListed.toFixed(2)}×` : "—"}
+            </strong>
+          </div>
+          {marginOnListed !== null && marginOnListed < 3 && (
+            <div className="costing-summary-note">
+              This piece is published at {fmt(listedTotal)} and now costs {fmt(productionSubtotal)}
+              {" "}to build. That is a {marginOnListed.toFixed(2)}× margin, below your 3× floor.
+              Worth reviewing the listed price.
+            </div>
+          )}
+          {!allPiecesMatched && (
+            <div className="costing-summary-note">
+              Only {matchedPieces.length} of {editedPieces.length} pieces matched the
+              catalogue. The rest are priced from the rate card.
+            </div>
+          )}
+          {allPiecesMatched && marginOnListed !== null && marginOnListed >= 3 && (
+            <div className="costing-summary-note">
+              Charge the listed {fmt(listedTotal)}. At {marginOnListed.toFixed(2)}× it is
+              still healthy, so there is no reason to depart from the published price.
+              {suggestedRetail > listedTotal
+                ? ` Costing from scratch today would suggest ${fmt(suggestedRetail)}, worth noting if this piece comes up often.`
+                : ""}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <div className="upload-status upload-error">{error}</div>}
 

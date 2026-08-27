@@ -20,7 +20,7 @@ Roles are positional rather than hardcoded. The first active spendable account i
 
 A project without a budget is tracked but not capped, and reports `No budget set` rather than a fabricated percentage.
 
-**Order costing.** Per-job costing built from a rate card the practice defines for itself — materials, fabrication, outside services, finishing, labour, whatever the work actually consumes. Every entry is stored as a low/high range rather than a fixed price, because these are the costs that genuinely vary per job. The result is a production subtotal, a margin multiplier, and a suggested retail price with warnings.
+**Order costing.** Per-job costing built from a rate card the practice defines for itself — materials, fabrication, outside services, finishing, labour, whatever the work actually consumes. Every entry is stored as a low/high range rather than a fixed price, because these are the costs that genuinely vary per job. The result is a production subtotal, a margin multiplier, and a suggested retail price with warnings. Where the enquiry is for a piece that already has a published price, the catalogue takes over the pricing question and the costing becomes a margin check instead.
 
 **Committing a single rate.** Not every cost arrives as a whole order. Any line on the rate card can be put straight into a pot from the rate card itself, assigned to a project if one is picked, without going through a quote first. Because the card holds ranges and a pot item holds one number, the control asks which end of the range is being committed to — low, mid or high, each shown as the actual figure at the chosen quantity — rather than collapsing the range silently. Anything drawn from a spread lands flagged as an estimate; a settled price, where low and high agree, lands as a fact. The project defaults to whichever was used last, because costing a job in practice means adding several rates in one sitting.
 
@@ -30,9 +30,19 @@ The card ships empty and stays empty until someone fills it. Categories are the 
 
 Ledger ships with no blocks at all, and the migration that creates the table seeds nothing. That is the point rather than an omission: the application does not get to decide what kind of practice you have, so the only blocks that exist are ones a user built and chose to keep. A block carries its own categories, or collapses into a single named one at the moment it is applied.
 
+**Catalogue.** Pieces already listed for sale are synced from Shopify, one row per sellable variant, and handed to the costing model alongside the rate card. When an enquiry names a listed piece, the costing reports the published price and the margin that price now carries, rather than inventing a second number beside one that has already been decided.
+
+This is the distinction the feature exists to draw. For a bespoke commission the useful question is what to charge. For a catalogue piece it is whether what you already charge still works, because metal and casting costs move under a published price without anyone deciding anything. A margin that has thinned below the floor is flagged; a healthy one is left alone. The from-scratch figure is still shown, quietly, because a persistent gap between it and the listed price is the early warning that the price needs revisiting.
+
+Matches carry a confidence. An exact match names the piece and all its options; anything looser says so and adds a warning, because a confident wrong match is worse than an admitted uncertain one.
+
+**Studio hours.** Every pot item carries estimated studio hours alongside its cost, and the outstanding total is simply the hours on items not yet ticked off. The tile converts that into whole bench days, since eleven hours is easier to plan against as two days than as a number.
+
+Hours ride on the same object as the money and clear in the same gesture, so marking a job done removes both at once. That is deliberate: a separate time tracker sitting beside the work is the arrangement that always drifts out of step, and a stale hours figure is worse than none. For a practice of one the bench is usually the binding constraint rather than the bank, so this belongs next to the money rather than in a tool of its own.
+
 **Costing prediction.** Described in its own section below.
 
-**Screenshot parsing.** Banking screenshots are uploaded and parsed by a vision model, which proposes line items rather than writing them. Proposals land in `draft_items` and appear in a review queue. Nothing enters the ledger without being confirmed.
+**Screenshot parsing.** Two separate intakes, both routed through review. A task list or banking screenshot proposes pot line items, costs already committed. A client order or brief goes to the costing path instead, pricing work not yet taken on. Both are parsed by a vision model that proposes rather than writes: proposals land in `budget_drafts` and appear in a review queue, and nothing enters the ledger without being confirmed.
 
 ---
 
@@ -79,7 +89,8 @@ The accompanying diagram `ledger-system.html` renders the flow as a Vester-style
 | `budget_bank_accounts` | one row per real account, with a kind that determines how it is counted |
 | `budget_projects` | project, client, status, optional budget ceiling, target margin, due date |
 | `budget_pots` | savings categories with current balance |
-| `budget_items` | line items inside pots, with paid and estimate flags, optionally assigned to a project |
+| `budget_items` | line items inside pots, with cost, estimated studio hours, paid and estimate flags, optionally assigned to a project |
+| `budget_catalogue` | one row per sellable variant, synced from Shopify, with its published price |
 | `budget_production_costs` | the rate card, each input as a low/high range |
 | `budget_rate_blocks` | reusable sets of rate card lines; ships empty by design |
 | `budget_order_quotes` | saved quotes, with actual outturn recorded on close |
@@ -99,7 +110,8 @@ All tables have RLS policies restricting access to `auth.uid()`. The rollup view
 
 - Vite + React + TypeScript, strict mode
 - Supabase for auth, Postgres, edge functions and storage
-- Anthropic API (vision) via a Supabase Edge Function for screenshot parsing
+- Anthropic API (vision) via Supabase Edge Functions for screenshot parsing and order costing
+- Shopify Admin GraphQL API for the catalogue sync
 - Vitest for the prediction tests
 - Vercel hosting on a custom subdomain
 - PWA enabled, installs to iOS home screen
@@ -112,16 +124,33 @@ Running costs sit inside the free tiers for Supabase and Vercel. Screenshot pars
 
 ### 1. Migrations
 
-Run the SQL files in `supabase/migrations/` in order in the Supabase SQL Editor. `005_projects_and_accounts.sql` and `006_rate_blocks.sql` are both additive only: they create new tables, add nullable columns, and backfill. They drop nothing and are safe to run more than once.
+Run the SQL files in `supabase/migrations/` in order in the Supabase SQL Editor. Everything from `005_projects_and_accounts.sql` onward is additive only: new tables, nullable columns, backfills. Nothing is dropped and all are safe to run more than once. `007_catalogue.sql` adds the Shopify catalogue, `008_catalogue_upsert_fix.sql` corrects its uniqueness constraint, and `009_studio_hours.sql` adds hours to pot items.
+
+Each migration grants on its own tables explicitly. This is not decoration: a table created without grants is invisible to PostgREST, which answers `404` rather than a permissions error, and the app reads that as an unmigrated database and silently falls back. That failure took a long afternoon to diagnose once.
 
 No migration seeds a rate card or a set of pots. `002_seed_data.sql` is an optional example dataset with invented figures, and `supabase/examples/rate-card-metalwork.sql` is one practice's real card kept as a worked example. Neither is run by anything; both have to be pasted deliberately, and both want your own `auth.users.id` in place of the placeholder. Any file matching `*.local.sql` is ignored by git and never committed — that is where a real practice's own figures belong.
 
-### 2. Edge function
+### 2. Edge functions
+
+Three functions, all deployed with `--no-verify-jwt` because each checks the `Authorization` header itself.
 
 ```bash
-supabase functions deploy parse-screenshot --project-ref YOUR_PROJECT_REF
+supabase functions deploy parse-screenshot --no-verify-jwt --project-ref YOUR_PROJECT_REF
+supabase functions deploy cost-order       --no-verify-jwt --project-ref YOUR_PROJECT_REF
+supabase functions deploy sync-catalogue   --no-verify-jwt --project-ref YOUR_PROJECT_REF
+
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref YOUR_PROJECT_REF
 ```
+
+The catalogue sync additionally needs Shopify credentials:
+
+```bash
+supabase secrets set SHOPIFY_STORE_DOMAIN=yourstore.myshopify.com --project-ref YOUR_PROJECT_REF
+supabase secrets set SHOPIFY_CLIENT_ID=... --project-ref YOUR_PROJECT_REF
+supabase secrets set SHOPIFY_CLIENT_SECRET=shpss_... --project-ref YOUR_PROJECT_REF
+```
+
+Create the app in the Shopify **Dev Dashboard**, give it the `read_products` scope, release a version, and install it on the store. Admin-created custom apps and their permanent `shpat_` tokens were deprecated on 1 January 2026; Dev Dashboard apps exchange a client ID and secret for a token lasting 24 hours, which `sync-catalogue` does per run rather than caching. This works because app and store sit in the same Shopify organisation. Across organisations it would need a full OAuth flow instead.
 
 ### 3. Environment variables
 
@@ -146,6 +175,18 @@ npm test
 ### 5. Deploy
 
 Push to GitHub, import into Vercel, point the subdomain CNAME at Vercel. Further detail in `DEPLOY.md`.
+
+### Things that expire
+
+Two external identifiers in this codebase have a shelf life, and both fail in ways that do not name themselves.
+
+**Model IDs.** The functions pin an Anthropic model. When one is retired the API returns `not_found_error` and the app reports only that the call failed. List what is currently available with:
+
+```bash
+curl -s https://api.anthropic.com/v1/models -H "x-api-key: KEY" -H "anthropic-version: 2023-06-01"
+```
+
+**Shopify API versions.** `sync-catalogue` defaults to a version and accepts a `SHOPIFY_API_VERSION` secret to override it without a code change. A retired version returns `404`, which reads like a missing endpoint rather than an expiry.
 
 ### Auth
 

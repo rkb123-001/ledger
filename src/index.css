@@ -1757,3 +1757,86 @@ button {
   .accounts-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .project-figures { gap: 12px; }
 }
+
+
+/* ---------------------------------------------------------------
+   Catalogue matching (migration 007)
+   A piece that already has a published price is a different object
+   from one being priced from scratch, so it is marked as such rather
+   than sitting silently among the cost lines.
+   --------------------------------------------------------------- */
+
+.catalogue-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  background: var(--success-bg, #e8f3ee);
+  border: 1px solid var(--success-border, #bcd9cb);
+  font-size: 13px;
+}
+
+.catalogue-match.confidence-likely,
+.catalogue-match.confidence-loose {
+  background: var(--warning-bg, #fdf3e3);
+  border-color: var(--warning-border, #e8d3ab);
+}
+
+.catalogue-match-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.catalogue-match-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.catalogue-match-price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.costing-summary-note {
+  padding: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+
+/* Studio hours (migration 009). Sits beside the amount, deliberately quieter,
+   because it is a second reading of the same item rather than a rival to it. */
+.item-hours-input {
+  width: 46px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.item-hours-input:focus {
+  opacity: 1;
+}
+
+.item-hours-input::placeholder {
+  opacity: 0.4;
+}
+
+.summary-sub {
+  font-size: 12px;
+  opacity: 0.65;
+  margin-top: 2px;
+}

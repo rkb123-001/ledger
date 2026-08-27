@@ -576,6 +576,18 @@ export default function App() {
   // that is owed but not yet in. Before migration 005 those were three
   // fixed columns. Now they are derived by role from however many
   // accounts exist, with the old columns as the fallback.
+  // Outstanding studio hours: the same rule as committed money, so ticking an
+  // item off clears its hours in the same gesture. No second thing to maintain.
+  const outstandingHours = pots.reduce(
+    (sum, pot) =>
+      sum +
+      pot.items.reduce(
+        (s, i) => s + (i.paid ? 0 : Number(i.hours ?? 0)),
+        0
+      ),
+    0
+  );
+
   const derived = bankAccounts ? deriveTotals(bankAccounts) : null;
   const primaryBalance = derived
     ? derived.primaryBalance
@@ -931,6 +943,21 @@ export default function App() {
           <div className="summary-value">{fmt(totalShortfallBeforeRebalance)}</div>
         </div>
         <div className="summary-card">
+          <div className="summary-label">Studio hours outstanding</div>
+          <div className="summary-value">
+            {outstandingHours % 1 === 0
+              ? outstandingHours
+              : outstandingHours.toFixed(1)}
+            h
+          </div>
+          {outstandingHours > 0 && (
+            <div className="summary-sub">
+              about {Math.ceil(outstandingHours / 6)} full bench{" "}
+              {Math.ceil(outstandingHours / 6) === 1 ? "day" : "days"}
+            </div>
+          )}
+        </div>
+        <div className="summary-card">
           <div className="summary-label">HSBC after transfer</div>
           <div
             className="summary-value"
@@ -1049,6 +1076,16 @@ export default function App() {
               >
                 ⚠ Shortfall of {fmt(Math.abs(hsbcAfter))}
               </div>
+              {/* Reserves are excluded from available on purpose, but staying
+                  silent about them when short just makes the user do the
+                  arithmetic. Name the option, do not take it for them. */}
+              {derived && derived.reserves > 0 && (
+                <div style={{ fontSize: 13, color: "var(--info-text)", marginTop: 4 }}>
+                  {derived.reserves >= Math.abs(hsbcAfter)
+                    ? `Your reserve holds ${fmt(derived.reserves)}, which would cover this and leave ${fmt(derived.reserves - Math.abs(hsbcAfter))}. Reserves are held back deliberately, so this is a decision rather than a suggestion.`
+                    : `Your reserve holds ${fmt(derived.reserves)}, which would not close the gap on its own. ${fmt(Math.abs(hsbcAfter) - derived.reserves)} would still be short.`}
+                </div>
+              )}
               {account.scenario === "without" &&
                 Math.abs(hsbcAfter) <= incomingBalance && (
                   <div style={{ fontSize: 13, color: "var(--info-text)", marginTop: 4 }}>

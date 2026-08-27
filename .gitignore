@@ -11,3 +11,4 @@ supabase/.temp/
 
 # personal seed data, never committed
 *.local.sql
+.env*

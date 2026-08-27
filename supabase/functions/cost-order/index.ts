@@ -28,12 +28,28 @@ interface CostBreakdownLine {
   is_estimate: boolean;
 }
 
+interface CatalogueEntry {
+  title: string;
+  variant_title: string | null;
+  price: number;
+  handle: string | null;
+}
+
+interface CatalogueMatch {
+  title: string;
+  variant_title: string | null;
+  listed_price: number;
+  handle: string | null;
+  confidence: "exact" | "likely" | "loose";
+}
+
 interface CostedPiece {
   name: string;
   quantity: number;
   notes: string;
   breakdown: CostBreakdownLine[];
   production_cost: number;
+  catalogue_match: CatalogueMatch | null;
 }
 
 interface CostingResult {
@@ -43,10 +59,12 @@ interface CostingResult {
   production_subtotal: number;
   margin_multiplier: number;
   suggested_retail: number;
+  listed_total: number | null;
+  margin_on_listed: number | null;
   warnings: string[];
 }
 
-function buildSystemPrompt(rateCard: ProductionCostRow[]): string {
+function buildSystemPrompt(rateCard: ProductionCostRow[], catalogue: CatalogueEntry[]): string {
   const rateCardText = rateCard
     .map(
       (r) =>
@@ -56,6 +74,15 @@ function buildSystemPrompt(rateCard: ProductionCostRow[]): string {
     )
     .join("\n");
 
+  const catalogueText = catalogue.length
+    ? catalogue
+        .map(
+          (c) =>
+            `- ${c.title}${c.variant_title ? ` | ${c.variant_title}` : ""} | listed £${c.price.toFixed(2)}`
+        )
+        .join("\n")
+    : "(no catalogue synced)";
+
   return `You are costing a jewellery studio order from a screenshot of a client order or specification.
 
 The user is Rebekah Kosonen Bide, who runs an independent fine jewellery practice based in London.
@@ -64,6 +91,9 @@ Use ONLY the production rate card below to estimate costs. Use the midpoint of e
 
 PRODUCTION RATE CARD:
 ${rateCardText}
+
+PUBLISHED CATALOGUE (pieces already listed for sale, with their published prices):
+${catalogueText}
 
 Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 
@@ -83,12 +113,21 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
           "is_estimate": true
         }
       ],
-      "production_cost": number
+      "production_cost": number,
+      "catalogue_match": {
+        "title": "string — the catalogue product this piece matches",
+        "variant_title": "string or null — the matching variant, e.g. '.925 SILVER / BELCHER'",
+        "listed_price": number,
+        "handle": "string or null",
+        "confidence": "exact | likely | loose"
+      }
     }
   ],
   "production_subtotal": number,
   "margin_multiplier": number,
   "suggested_retail": number,
+  "listed_total": number,
+  "margin_on_listed": number,
   "warnings": [
     "string — anything ambiguous, missing info, or that the user should double-check"
   ]
@@ -105,6 +144,18 @@ COSTING RULES:
 - production_subtotal = sum of all (production_cost * quantity) across pieces.
 - Default margin_multiplier to 4. Use 5 only if the order is clearly DTC retail rather than wholesale or commission.
 - suggested_retail = production_subtotal * margin_multiplier, rounded up to nearest £5.
+
+CATALOGUE RULES:
+- Before costing a piece from scratch, check whether it matches something in the published catalogue above. Client enquiries very often name a listed piece.
+- Match on the piece and its options together. "tiny naked locket, engraved, on a belcher chain" should match the tiny naked heart locket variant with a belcher chain and custom engraving, not the plain one.
+- Set "catalogue_match" to null when there is no plausible match. Never invent a listed price.
+- Use "confidence": "exact" when the piece and all its options are named; "likely" when the piece is clear but an option is assumed; "loose" when you are matching on family resemblance only. Add a warning for anything below exact.
+- Still produce the full production breakdown for matched pieces. The point is to compare what the piece costs to build against the price already published.
+- "listed_total" = sum of (listed_price * quantity) across pieces that matched. Null if nothing matched.
+- "margin_on_listed" = listed_total / production_subtotal, to two decimals. Null if nothing matched.
+- When margin_on_listed falls below 3, add a warning saying the published price has thinned against current costs and by how much.
+- Do not suggest changing a published price unless the margin warning above applies. The published price is a decision that has already been made.
+
 - If the screenshot is unclear, partially visible, or missing key info (materials, sizes, finish), add a warning rather than guessing.
 - If a piece has no obvious match in the rate card, still cost it using the closest analogue and add a warning.
 
@@ -178,7 +229,23 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = buildSystemPrompt(rateCard);
+    // Catalogue is optional. A practice with nothing synced still gets a
+    // costing, it just gets no listed-price comparison.
+    const { data: catalogueRows } = await supabase
+      .from("budget_catalogue")
+      .select("title, variant_title, price, handle")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .order("title", { ascending: true });
+
+    const catalogue: CatalogueEntry[] = (catalogueRows ?? []).map((c: any) => ({
+      title: c.title,
+      variant_title: c.variant_title,
+      price: Number(c.price),
+      handle: c.handle,
+    }));
+
+    const systemPrompt = buildSystemPrompt(rateCard, catalogue);
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
       return new Response(JSON.stringify({ error: "Server not configured" }), {
