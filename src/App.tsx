@@ -6,6 +6,7 @@ import { PotCard } from "./components/PotCard";
 import { ScreenshotUpload } from "./components/ScreenshotUpload";
 import { DraftsReview } from "./components/DraftsReview";
 import { OrderCosting } from "./components/OrderCosting";
+import { QuotesPanel } from "./components/QuotesPanel";
 import { ProductionCosts } from "./components/ProductionCosts";
 import { AccountsPanel, deriveTotals } from "./components/AccountsPanel";
 import { ProjectsPanel } from "./components/ProjectsPanel";
@@ -983,6 +984,17 @@ export default function App() {
       <ScreenshotUpload onParsed={async () => { await flushAll(); fetchAll(); }} />
 
       <OrderCosting pots={pots} onCommitted={async () => { await flushAll(); fetchAll(); }} />
+
+      {userId && (
+        <QuotesPanel
+          userId={userId}
+          pots={pots}
+          onChanged={async () => {
+            await fetchAll();
+            fetchProjectLayer(userId);
+          }}
+        />
+      )}
 
       <DraftsReview drafts={drafts} pots={pots} onAccepted={async () => { await flushAll(); fetchAll(); }} />
 

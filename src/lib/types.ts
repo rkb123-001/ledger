@@ -148,6 +148,11 @@ export interface OrderQuote {
   status: string;
   committed_to_pots: boolean;
   created_at: string;
+  /** Outturn, recorded on close (migrations 005 and 010). Null until then. */
+  actual_production_cost?: number | null;
+  quoted_hours?: number | null;
+  actual_hours?: number | null;
+  closed_at?: string | null;
 }
 
 // =============================================================

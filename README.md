@@ -40,6 +40,12 @@ Matches carry a confidence. An exact match names the piece and all its options; 
 
 Hours ride on the same object as the money and clear in the same gesture, so marking a job done removes both at once. That is deliberate: a separate time tracker sitting beside the work is the arrangement that always drifts out of step, and a stale hours figure is worse than none. For a practice of one the bench is usually the binding constraint rather than the bank, so this belongs next to the money rather than in a tool of its own.
 
+**Quotes and close-out.** Saved quotes are listed with what was quoted, what retail was suggested, and whether the job went to pots. Closing one records what it actually cost and, optionally, how many hours it actually took.
+
+That close-out is the whole point. `budget_prediction_factor` learns from the gap between quoted and actual, so without a way to record the actual it has nothing to learn from and returns `1.0` in perpetuity. The panel states where calibration stands in words rather than leaving it as a silent multiplier, and computes the median the same way the function does, outlier rejection included, so the figure on screen reconciles against the one driving the maths.
+
+Closed quotes collapse behind a toggle, since the list is mostly about work still in flight. Reopening one clears the outturn and puts it back.
+
 **Costing prediction.** Described in its own section below.
 
 **Screenshot parsing.** Two separate intakes, both routed through review. A task list or banking screenshot proposes pot line items, costs already committed. A client order or brief goes to the costing path instead, pricing work not yet taken on. Both are parsed by a vision model that proposes rather than writes: proposals land in `budget_drafts` and appear in a review queue, and nothing enters the ledger without being confirmed.
@@ -54,7 +60,7 @@ A quote is a range, not a number, because the rate card stores every input as a 
 
 Three properties of that function matter more than the arithmetic:
 
-- It returns exactly `1.0` until at least three jobs have closed. The honest default is no correction, not a flattering one derived from a single data point.
+- It returns exactly `1.0` until at least three jobs have closed. The honest default is no correction, not a flattering one derived from a single data point. A job closes through the Quotes panel, which is the only thing that writes `actual_production_cost`.
 - It uses the median, not the mean, and discards ratios outside 0.25 to 4.0. One mis-keyed figure cannot skew every future quote.
 - The UI states the factor and the sample size it rests on, so a prediction never arrives without its provenance.
 
@@ -93,7 +99,7 @@ The accompanying diagram `ledger-system.html` renders the flow as a Vester-style
 | `budget_catalogue` | one row per sellable variant, synced from Shopify, with its published price |
 | `budget_production_costs` | the rate card, each input as a low/high range |
 | `budget_rate_blocks` | reusable sets of rate card lines; ships empty by design |
-| `budget_order_quotes` | saved quotes, with actual outturn recorded on close |
+| `budget_order_quotes` | saved quotes, with cost and hours outturn recorded on close |
 | `budget_drafts` | pending suggestions from screenshot parsing, awaiting review |
 | `budget_accounts` | the original fixed-column account row, retained for fallback |
 
@@ -124,7 +130,7 @@ Running costs sit inside the free tiers for Supabase and Vercel. Screenshot pars
 
 ### 1. Migrations
 
-Run the SQL files in `supabase/migrations/` in order in the Supabase SQL Editor. Everything from `005_projects_and_accounts.sql` onward is additive only: new tables, nullable columns, backfills. Nothing is dropped and all are safe to run more than once. `007_catalogue.sql` adds the Shopify catalogue, `008_catalogue_upsert_fix.sql` corrects its uniqueness constraint, and `009_studio_hours.sql` adds hours to pot items.
+Run the SQL files in `supabase/migrations/` in order in the Supabase SQL Editor. Everything from `005_projects_and_accounts.sql` onward is additive only: new tables, nullable columns, backfills. Nothing is dropped and all are safe to run more than once. `007_catalogue.sql` adds the Shopify catalogue, `008_catalogue_upsert_fix.sql` corrects its uniqueness constraint, `009_studio_hours.sql` adds hours to pot items, and `010_quote_outturn.sql` adds the close-out fields to quotes.
 
 Each migration grants on its own tables explicitly. This is not decoration: a table created without grants is invisible to PostgREST, which answers `404` rather than a permissions error, and the app reads that as an unmigrated database and silently falls back. That failure took a long afternoon to diagnose once.
 

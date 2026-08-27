@@ -1840,3 +1840,236 @@ button {
   opacity: 0.65;
   margin-top: 2px;
 }
+
+
+/* ---------------------------------------------------------------
+   Quotes (migration 010)
+   A quote is a claim about the future; closing it is the moment it
+   becomes evidence. The layout puts quoted and actual side by side
+   so the gap between them is the thing you read first.
+   --------------------------------------------------------------- */
+
+.quotes-panel {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  border: 0.5px solid var(--border, #ddd);
+}
+
+.quotes-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quotes-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.quotes-sub {
+  margin: 4px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.7;
+  max-width: 60ch;
+}
+
+.quotes-empty {
+  font-size: 13px;
+  opacity: 0.6;
+  padding: 8px 0;
+}
+
+.quote-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-top: 0.5px solid var(--border, #e5e5e5);
+}
+
+.quote-row.closed {
+  opacity: 0.72;
+}
+
+.quote-main {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.quote-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.quote-ref {
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+.quote-meta {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.quote-figures {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.quote-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.quote-figure-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+}
+
+.quote-figure-value {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.quote-variance {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.quote-actions {
+  margin-left: auto;
+}
+
+.quote-close-form {
+  flex: 1 1 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--info-bg, #eef2fb);
+}
+
+.quote-close-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.quote-close-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.quote-close-fields input {
+  width: 150px;
+  padding: 6px 8px;
+  font-size: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+}
+
+.quote-close-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+
+/* Expanded quote: the breakdown that was costed, and what can be done with it. */
+
+.quote-main {
+  flex: 1 1 180px;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.quote-caret {
+  opacity: 0.5;
+  font-size: 11px;
+}
+
+.quote-detail {
+  flex: 1 1 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--subtle-bg, #f6f6f5);
+}
+
+.quote-piece + .quote-piece {
+  margin-top: 12px;
+}
+
+.quote-piece-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.quote-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  padding: 3px 0;
+}
+
+.quote-line > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.quote-line-pot {
+  font-size: 11px;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.quote-line-amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.quote-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.draft-reject.danger {
+  color: var(--danger-text, #a2382b);
+}
+
+.quote-committed-note {
+  font-size: 12px;
+  opacity: 0.65;
+  text-align: right;
+  margin-top: 6px;
+}
