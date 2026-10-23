@@ -184,7 +184,9 @@ Push to GitHub, import into Vercel, point the subdomain CNAME at Vercel. Further
 
 ### Things that expire
 
-Two external identifiers in this codebase have a shelf life, and both fail in ways that do not name themselves.
+Three things in this stack have a shelf life, and all of them fail in ways that do not name themselves.
+
+**The Supabase project.** A free tier project is paused automatically after about a week with no database traffic. Nothing announces it. The app simply stops loading, or loads after a two minute delay, and sign in fails even in a private window, which looks exactly like a browser or auth problem and is not one. `.github/workflows/keep-supabase-awake.yml` runs every three days and makes one tiny authenticated request to keep the project warm, and doubles as a monitor: if it fails, something is wrong before you notice it in the app. When the app misbehaves, check the project status in the Supabase dashboard first, before touching browsers, caches or keys.
 
 **Model IDs.** The functions pin an Anthropic model. When one is retired the API returns `not_found_error` and the app reports only that the call failed. List what is currently available with:
 
@@ -193,6 +195,17 @@ curl -s https://api.anthropic.com/v1/models -H "x-api-key: KEY" -H "anthropic-ve
 ```
 
 **Shopify API versions.** `sync-catalogue` defaults to a version and accepts a `SHOPIFY_API_VERSION` secret to override it without a code change. A retired version returns `404`, which reads like a missing endpoint rather than an expiry.
+
+### API keys
+
+Supabase has two generations of keys and they are not interchangeable.
+
+- `sb_publishable_...` (46 characters) replaces the legacy `anon` JWT. It is safe in public, because it ships inside the deployed bundle and RLS is what protects the data. This is the value for `VITE_SUPABASE_ANON_KEY` and for the `SUPABASE_ANON_KEY` repository secret.
+- `sb_secret_...` replaces `service_role`. It bypasses RLS. It belongs only in Supabase function secrets, never in the frontend, never in a GitHub Action.
+
+The publishable key goes in the `apikey` header only. Sending it as `Authorization: Bearer` is rejected as invalid, which reads like a wrong key rather than a wrong header.
+
+A key pasted into a GitHub secret can silently truncate. The keep awake workflow prints `key length` for that reason: GitHub masks the value but not its length, so a 40 where 46 belongs is the fastest way to spot a bad paste. A rejected key returns 401 or 403, which means the project is awake and the key is wrong. No response at all means the project is paused or the URL is wrong. The workflow reports those two cases separately on purpose.
 
 ### Auth
 
