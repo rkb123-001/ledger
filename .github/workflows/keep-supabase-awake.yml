@@ -1,0 +1,60 @@
+# Keeps the Supabase project from auto-pausing.
+#
+# The free tier pauses a project after about a week with no database activity,
+# and a paused project answers nothing. The frontend still serves from Vercel,
+# so the failure looks like a broken app rather than a sleeping database: the
+# page renders, hangs, and refuses to log in. That cost an afternoon to
+# diagnose on 23 October 2026.
+#
+# One cheap read every three days is enough to count as activity. The query
+# asks for a single id and no rows beyond the first, so it moves almost no data.
+#
+# Needs two repository secrets, under Settings > Secrets and variables >
+# Actions:
+#   SUPABASE_URL        https://qyorosazvaqgbknjdhou.supabase.co
+#   SUPABASE_ANON_KEY   the publishable key (sb_publishable_...)
+#
+# Both are already public in the deployed bundle, so neither is sensitive.
+# They live in secrets to keep the project reference out of a public repo.
+
+name: Keep Supabase awake
+
+on:
+  schedule:
+    # 07:14 UTC every third day. An odd minute on purpose: the hour and the
+    # half hour are heavily contended on GitHub's shared runners and get queued.
+    - cron: "14 7 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY is not set in repository secrets."
+            exit 1
+          fi
+
+          code=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 30 \
+            "$SUPABASE_URL/rest/v1/budget_pots?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+
+          echo "HTTP $code"
+          head -c 300 /tmp/body; echo
+
+          # RLS means an unauthenticated read returns an empty array, not rows.
+          # 200 with [] is the healthy answer: the database was reached and
+          # answered. Anything else means it is paused, unreachable, or the key
+          # has been rotated.
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase did not answer normally (HTTP $code). The project may be paused."
+            exit 1
+          fi
+
+          echo "Supabase is awake."
