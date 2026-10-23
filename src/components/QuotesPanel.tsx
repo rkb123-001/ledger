@@ -34,6 +34,9 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
   const [editPieces, setEditPieces] = useState<CostedPiece[]>([]);
   const [costDraft, setCostDraft] = useState("");
   const [hoursDraft, setHoursDraft] = useState("");
+  // Set while a hand-written quote is being typed for the first time. Cancelling
+  // that edit removes the row, so an abandoned "New quote" leaves nothing behind.
+  const [unsavedNewId, setUnsavedNewId] = useState<string | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -130,6 +133,7 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
   }
 
   function startEdit(q: Row) {
+    setUnsavedNewId(null);
     setEditingId(q.id);
     setExpandedId(q.id);
     setEditClient(q.client_name ?? "");
@@ -152,6 +156,81 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
       next[pi] = { ...next[pi], ...patch };
       return next;
     });
+  }
+
+  function addPiece() {
+    setEditPieces((prev) => [
+      ...prev,
+      {
+        name: "New piece",
+        quantity: 1,
+        notes: "",
+        breakdown: [{ description: "", amount: 0, pot_name: null, is_estimate: true }],
+        production_cost: 0,
+      },
+    ]);
+  }
+
+  function addLine(pi: number) {
+    setEditPieces((prev) => {
+      const next = JSON.parse(JSON.stringify(prev)) as CostedPiece[];
+      next[pi].breakdown = [
+        ...(next[pi].breakdown ?? []),
+        { description: "", amount: 0, pot_name: null, is_estimate: true },
+      ];
+      return next;
+    });
+  }
+
+  function removePiece(pi: number) {
+    setEditPieces((prev) => prev.filter((_, i) => i !== pi));
+  }
+
+  // A quote written by hand, for work that never arrived as an email to cost.
+  // It is created empty and opened straight in the editor, so there is only one
+  // place in the app where a quote's lines get typed.
+  async function createBlankQuote() {
+    setBusy(true);
+    setError(null);
+    const { data, error: err } = await supabase
+      .from("budget_order_quotes")
+      .insert({
+        user_id: userId,
+        client_name: null,
+        order_reference: null,
+        pieces: [],
+        production_subtotal: 0,
+        suggested_retail: null,
+        margin_multiplier: 4,
+        status: "saved",
+        committed_to_pots: false,
+      })
+      .select()
+      .single();
+    setBusy(false);
+
+    if (err || !data) {
+      setError(err?.message ?? "Could not create the quote");
+      return;
+    }
+
+    setCollapsed(false);
+    await fetchQuotes();
+    const row = data as Row;
+    setUnsavedNewId(row.id);
+    setEditingId(row.id);
+    setExpandedId(row.id);
+    setEditClient("");
+    setEditRef("");
+    setEditPieces([
+      {
+        name: "New piece",
+        quantity: 1,
+        notes: "",
+        breakdown: [{ description: "", amount: 0, pot_name: null, is_estimate: true }],
+        production_cost: 0,
+      },
+    ]);
   }
 
   function removeLine(pi: number, li: number) {
@@ -205,6 +284,7 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
       return;
     }
     setEditingId(null);
+    setUnsavedNewId(null);
     setError(null);
     await fetchQuotes();
     onChanged?.();
@@ -258,6 +338,30 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
 
     setBusy(false);
     setError(null);
+    await fetchQuotes();
+    onChanged?.();
+  }
+
+  // Cancelling a normal edit just closes the editor. Cancelling the first edit
+  // of a hand-written quote deletes the row it was created against, because
+  // nothing has been typed into it worth keeping.
+  async function cancelEdit(q: Row) {
+    setEditingId(null);
+    if (unsavedNewId !== q.id) return;
+
+    setUnsavedNewId(null);
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("budget_order_quotes")
+      .delete()
+      .eq("id", q.id)
+      .eq("user_id", userId);
+    setBusy(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    if (expandedId === q.id) setExpandedId(null);
     await fetchQuotes();
     onChanged?.();
   }
@@ -425,6 +529,13 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
                           }
                         />
                       </label>
+                      <button
+                        className="item-delete"
+                        title="Remove piece"
+                        onClick={() => removePiece(pi)}
+                      >
+                        \u00d7
+                      </button>
                     </div>
 
                     {(piece.breakdown ?? []).map((line, li) => (
@@ -468,8 +579,16 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
                         </button>
                       </div>
                     ))}
+
+                    <button className="quote-add-line" onClick={() => addLine(pi)}>
+                      + Add line
+                    </button>
                   </div>
                 ))}
+
+                <button className="quote-add-piece" onClick={addPiece}>
+                  + Add piece
+                </button>
 
                 <div className="quote-edit-total">
                   <span>Production subtotal</span>
@@ -484,7 +603,11 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
                 )}
 
                 <div className="quote-detail-actions">
-                  <button className="draft-reject" onClick={() => setEditingId(null)}>
+                  <button
+                    className="draft-reject"
+                    onClick={() => { void cancelEdit(q); }}
+                    disabled={busy}
+                  >
                     Cancel
                   </button>
                   <button
@@ -628,6 +751,18 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
             <span className="panel-count">{open.length}</span>
           )}
         </button>
+        {!collapsed && (
+          <div className="quotes-header-actions">
+            <button
+              className="add-btn"
+              onClick={createBlankQuote}
+              disabled={busy}
+              title="Write a quote by hand"
+            >
+              New quote
+            </button>
+          </div>
+        )}
         {!collapsed && closed.length > 0 && (
           <button className="draft-reject" onClick={() => setShowClosed((s) => !s)}>
             {showClosed ? "Hide closed" : `Show closed (${closed.length})`}
@@ -653,7 +788,7 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
 
       {!collapsed && open.length === 0 && closed.length === 0 && (
         <div className="quotes-empty">
-          No quotes yet. Cost an order and choose Save quote only, or Add to pots as drafts.
+          No quotes yet. Cost an order from an email, or write one by hand with New quote.
         </div>
       )}
 

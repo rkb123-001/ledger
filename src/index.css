@@ -1947,6 +1947,36 @@ button {
   font-weight: 600;
 }
 
+.quotes-header-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.quote-add-line,
+.quote-add-piece {
+  background: none;
+  border: 0.5px dashed var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.quote-add-line {
+  margin-top: 6px;
+}
+
+.quote-add-piece {
+  margin: 10px 0 4px;
+}
+
+.quote-add-line:hover,
+.quote-add-piece:hover {
+  color: var(--text);
+}
+
 .quotes-sub {
   margin: 4px 0 14px;
   font-size: 13px;
