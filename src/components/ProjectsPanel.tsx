@@ -112,7 +112,7 @@ export function ProjectsPanel({
           </div>
         </div>
         <div className="projects-actions">
-          <button onClick={() => setShowArchived((v) => !v)}>
+          <button className="add-btn" onClick={() => setShowArchived((v) => !v)}>
             {showArchived ? "Hide archived" : "Show archived"}
           </button>
           <button className="add-btn" onClick={addProject} disabled={busy}>

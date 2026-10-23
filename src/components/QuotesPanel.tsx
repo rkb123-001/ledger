@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
-import type { OrderQuote, BudgetPot } from "../lib/types";
+import type { OrderQuote, BudgetPot, CostedPiece } from "../lib/types";
 import { fmt } from "../lib/format";
 
 interface QuotesPanelProps {
@@ -28,6 +28,10 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
   const [quotes, setQuotes] = useState<Row[] | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editClient, setEditClient] = useState("");
+  const [editRef, setEditRef] = useState("");
+  const [editPieces, setEditPieces] = useState<CostedPiece[]>([]);
   const [costDraft, setCostDraft] = useState("");
   const [hoursDraft, setHoursDraft] = useState("");
   const [showClosed, setShowClosed] = useState(false);
@@ -113,6 +117,87 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
       return;
     }
     setClosingId(null);
+    setError(null);
+    await fetchQuotes();
+    onChanged?.();
+  }
+
+  function startEdit(q: Row) {
+    setEditingId(q.id);
+    setExpandedId(q.id);
+    setEditClient(q.client_name ?? "");
+    setEditRef(q.order_reference ?? "");
+    // Deep copy, so abandoning an edit leaves the saved quote untouched.
+    setEditPieces(JSON.parse(JSON.stringify(q.pieces ?? [])));
+  }
+
+  function patchLine(pi: number, li: number, patch: Record<string, unknown>) {
+    setEditPieces((prev) => {
+      const next = JSON.parse(JSON.stringify(prev)) as CostedPiece[];
+      next[pi].breakdown[li] = { ...next[pi].breakdown[li], ...patch };
+      return next;
+    });
+  }
+
+  function patchPiece(pi: number, patch: Record<string, unknown>) {
+    setEditPieces((prev) => {
+      const next = JSON.parse(JSON.stringify(prev)) as CostedPiece[];
+      next[pi] = { ...next[pi], ...patch };
+      return next;
+    });
+  }
+
+  function removeLine(pi: number, li: number) {
+    setEditPieces((prev) => {
+      const next = JSON.parse(JSON.stringify(prev)) as CostedPiece[];
+      next[pi].breakdown.splice(li, 1);
+      return next;
+    });
+  }
+
+  const editSubtotal = editPieces.reduce(
+    (sum, p) =>
+      sum +
+      (p.breakdown ?? []).reduce((s, l) => s + Number(l.amount || 0), 0) *
+        (p.quantity || 1),
+    0
+  );
+
+  async function saveEdit(q: Row) {
+    setBusy(true);
+    // production_cost per piece is stored alongside the breakdown, so it has to
+    // be recomputed here or the two disagree the moment a line changes.
+    const pieces = editPieces.map((p) => ({
+      ...p,
+      production_cost: (p.breakdown ?? []).reduce(
+        (s, l) => s + Number(l.amount || 0),
+        0
+      ),
+    }));
+    const subtotal = pieces.reduce(
+      (sum, p) => sum + Number(p.production_cost) * (p.quantity || 1),
+      0
+    );
+    const retail =
+      Math.ceil((subtotal * Number(q.margin_multiplier || 4)) / 5) * 5;
+
+    const { error: err } = await supabase
+      .from("budget_order_quotes")
+      .update({
+        client_name: editClient || null,
+        order_reference: editRef || null,
+        pieces,
+        production_subtotal: subtotal,
+        suggested_retail: retail,
+      })
+      .eq("id", q.id)
+      .eq("user_id", userId);
+    setBusy(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setEditingId(null);
     setError(null);
     await fetchQuotes();
     onChanged?.();
@@ -291,53 +376,173 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
 
         {expandedId === q.id && (
           <div className="quote-detail">
-            {(q.pieces ?? []).map((piece, pi) => (
-              <div key={pi} className="quote-piece">
-                <div className="quote-piece-name">
-                  {piece.name}
-                  {(piece.quantity || 1) > 1 ? ` ×${piece.quantity}` : ""}
+            {editingId === q.id ? (
+              <>
+                <div className="quote-edit-meta">
+                  <label>
+                    Client
+                    <input
+                      value={editClient}
+                      onChange={(e) => setEditClient(e.target.value)}
+                      placeholder="Client name"
+                    />
+                  </label>
+                  <label>
+                    Order ref
+                    <input
+                      value={editRef}
+                      onChange={(e) => setEditRef(e.target.value)}
+                      placeholder="e.g. 0448"
+                    />
+                  </label>
                 </div>
-                {(piece.breakdown ?? []).map((line, li) => (
-                  <div key={li} className="quote-line">
-                    <span>{line.description}</span>
-                    <span className="quote-line-pot">{line.pot_name ?? "no pot"}</span>
-                    <span className="quote-line-amount">{fmt(Number(line.amount))}</span>
+
+                {editPieces.map((piece, pi) => (
+                  <div key={pi} className="quote-piece">
+                    <div className="quote-edit-piece-header">
+                      <input
+                        className="quote-edit-name"
+                        value={piece.name}
+                        onChange={(e) => patchPiece(pi, { name: e.target.value })}
+                      />
+                      <label className="quote-edit-qty">
+                        Qty
+                        <input
+                          type="number"
+                          min="1"
+                          value={piece.quantity || 1}
+                          onChange={(e) =>
+                            patchPiece(pi, {
+                              quantity: parseInt(e.target.value) || 1,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    {(piece.breakdown ?? []).map((line, li) => (
+                      <div key={li} className="quote-line editing">
+                        <input
+                          value={line.description}
+                          onChange={(e) =>
+                            patchLine(pi, li, { description: e.target.value })
+                          }
+                        />
+                        <select
+                          value={line.pot_name ?? ""}
+                          onChange={(e) =>
+                            patchLine(pi, li, { pot_name: e.target.value || null })
+                          }
+                        >
+                          <option value="">no pot</option>
+                          {pots.map((p) => (
+                            <option key={p.id} value={p.name}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="quote-line-amount-input"
+                          inputMode="decimal"
+                          value={String(line.amount ?? "")}
+                          onChange={(e) =>
+                            patchLine(pi, li, {
+                              amount:
+                                parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0,
+                            })
+                          }
+                        />
+                        <button
+                          className="item-delete"
+                          title="Remove line"
+                          onClick={() => removeLine(pi, li)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 ))}
-              </div>
-            ))}
 
-            {(q.pieces ?? []).length === 0 && (
-              <div className="quote-line">No cost breakdown saved with this quote.</div>
-            )}
+                <div className="quote-edit-total">
+                  <span>Production subtotal</span>
+                  <strong>{fmt(editSubtotal)}</strong>
+                </div>
 
-            <div className="quote-detail-actions">
-              <button
-                className="draft-reject danger"
-                onClick={() => deleteQuote(q)}
-                disabled={busy}
-              >
-                Delete quote
-              </button>
-              {q.committed_to_pots ? (
-                <span className="quote-committed-note">
-                  Already committed. Committing again would double the costs.
-                </span>
-              ) : (
-                <button
-                  className="upload-button"
-                  onClick={() => commitToPots(q)}
-                  disabled={busy}
-                >
-                  {busy ? "Working…" : "Commit costs to pots"}
-                </button>
-              )}
-            </div>
+                {q.committed_to_pots && (
+                  <div className="quote-committed-note">
+                    This quote was already committed. Editing it does not change
+                    the drafts or pot items it produced.
+                  </div>
+                )}
 
-            {!q.committed_to_pots && (
-              <div className="quote-committed-note">
-                Lines go to the review queue as drafts, not straight into pots.
-              </div>
+                <div className="quote-detail-actions">
+                  <button className="draft-reject" onClick={() => setEditingId(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="upload-button"
+                    onClick={() => saveEdit(q)}
+                    disabled={busy}
+                  >
+                    {busy ? "Saving…" : "Save changes"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {(q.pieces ?? []).map((piece, pi) => (
+                  <div key={pi} className="quote-piece">
+                    <div className="quote-piece-name">
+                      {piece.name}
+                      {(piece.quantity || 1) > 1 ? ` ×${piece.quantity}` : ""}
+                    </div>
+                    {(piece.breakdown ?? []).map((line, li) => (
+                      <div key={li} className="quote-line">
+                        <span>{line.description}</span>
+                        <span className="quote-line-pot">{line.pot_name ?? "no pot"}</span>
+                        <span className="quote-line-amount">{fmt(Number(line.amount))}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+
+                {(q.pieces ?? []).length === 0 && (
+                  <div className="quote-line">No cost breakdown saved with this quote.</div>
+                )}
+
+                <div className="quote-detail-actions">
+                  <button
+                    className="draft-reject danger"
+                    onClick={() => deleteQuote(q)}
+                    disabled={busy}
+                  >
+                    Delete quote
+                  </button>
+                  <button className="draft-reject" onClick={() => startEdit(q)}>
+                    Edit
+                  </button>
+                  {q.committed_to_pots ? (
+                    <span className="quote-committed-note">
+                      Already committed. Committing again would double the costs.
+                    </span>
+                  ) : (
+                    <button
+                      className="upload-button"
+                      onClick={() => commitToPots(q)}
+                      disabled={busy}
+                    >
+                      {busy ? "Working…" : "Commit costs to pots"}
+                    </button>
+                  )}
+                </div>
+
+                {!q.committed_to_pots && (
+                  <div className="quote-committed-note">
+                    Lines go to the review queue as drafts, not straight into pots.
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

@@ -63,7 +63,10 @@ button {
   max-width: 800px;
   margin: 0 auto;
   padding: 1rem;
-  padding-bottom: env(safe-area-inset-bottom, 1rem);
+  /* env() falls back only when unsupported, not when it resolves to 0, which
+     it does on desktop. Adding a real value so the last section is not flush
+     against the bottom of the window. */
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* Login */
@@ -1475,6 +1478,15 @@ button {
 .projects-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+/* .add-btn is full width where it sits alone under a list. In this row it
+   should size to its label instead, and not wrap onto two lines. */
+.projects-actions .add-btn {
+  width: auto;
+  margin-top: 0;
+  white-space: nowrap;
 }
 
 .accounts-grid {
@@ -2072,4 +2084,135 @@ button {
   opacity: 0.65;
   text-align: right;
   margin-top: 6px;
+}
+
+
+/* The two intake cards read as a pair: one records costs already committed,
+   the other prices work not yet taken on. Side by side makes that parallel
+   legible and stops each eating a full band of the page. */
+
+.intake-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.intake-row > .upload-section {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+/* Once an order is being reviewed the costing panel needs the full width,
+   so it breaks out of the two-column grid rather than being squeezed. */
+.intake-row > .costing-review {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .intake-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Editing a saved quote. Same shape as the read view so the eye does not have
+   to relearn the row when it becomes editable. */
+
+.quote-edit-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.quote-edit-meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.quote-edit-meta input {
+  padding: 6px 8px;
+  font-size: 14px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  min-width: 160px;
+}
+
+.quote-edit-piece-header {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 6px;
+}
+
+.quote-edit-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+}
+
+.quote-edit-qty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.quote-edit-qty input {
+  width: 56px;
+  padding: 5px 6px;
+  text-align: right;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+}
+
+.quote-line.editing {
+  gap: 6px;
+}
+
+.quote-line.editing > input:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+}
+
+.quote-line.editing select {
+  font-size: 12px;
+  padding: 5px 6px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  max-width: 150px;
+}
+
+.quote-line-amount-input {
+  width: 82px;
+  padding: 5px 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+}
+
+.quote-edit-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #ddd);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }

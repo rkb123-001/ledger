@@ -981,9 +981,10 @@ export default function App() {
         />
       )}
 
-      <ScreenshotUpload onParsed={async () => { await flushAll(); fetchAll(); }} />
-
-      <OrderCosting pots={pots} onCommitted={async () => { await flushAll(); fetchAll(); }} />
+      <div className="intake-row">
+        <ScreenshotUpload onParsed={async () => { await flushAll(); fetchAll(); }} />
+        <OrderCosting pots={pots} onCommitted={async () => { await flushAll(); fetchAll(); }} />
+      </div>
 
       {userId && (
         <QuotesPanel
