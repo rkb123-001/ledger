@@ -40,10 +40,17 @@ jobs:
             exit 1
           fi
 
+          # Length is printed because GitHub masks the secret itself but not
+          # its length, and a truncated or stale paste is the likeliest way
+          # this breaks. A publishable key is 46 characters.
+          echo "key length: ${#SUPABASE_ANON_KEY}  url: $SUPABASE_URL"
+
+          # Only the apikey header. Publishable keys belong there; Authorization
+          # is for a signed-in user's token, and sending the publishable key in
+          # it gets the whole request rejected as an invalid key.
           code=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 30 \
             "$SUPABASE_URL/rest/v1/budget_pots?select=id&limit=1" \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+            -H "apikey: $SUPABASE_ANON_KEY")
 
           echo "HTTP $code"
           head -c 300 /tmp/body; echo
@@ -52,9 +59,18 @@ jobs:
           # 200 with [] is the healthy answer: the database was reached and
           # answered. Anything else means it is paused, unreachable, or the key
           # has been rotated.
-          if [ "$code" != "200" ]; then
-            echo "::error::Supabase did not answer normally (HTTP $code). The project may be paused."
-            exit 1
-          fi
+          # Distinguish the causes rather than blaming the pause for everything.
+          case "$code" in
+            200) ;;
+            401|403)
+              echo "::error::Supabase rejected the key (HTTP $code). The project is awake but SUPABASE_ANON_KEY is wrong. Re-copy the publishable key from .env.local or the dashboard."
+              exit 1 ;;
+            000)
+              echo "::error::No response at all (timeout or DNS). The project is likely paused, or the URL is wrong."
+              exit 1 ;;
+            *)
+              echo "::error::Supabase answered HTTP $code. See the body above."
+              exit 1 ;;
+          esac
 
           echo "Supabase is awake."
