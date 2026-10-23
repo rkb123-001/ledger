@@ -5,6 +5,12 @@ import { fmt, isEstimateLabel } from "../lib/format";
 interface PotCardProps {
   pot: PotWithItems;
   collapsed: boolean;
+  /** False on the first pot, so the up arrow can be disabled rather than hidden. */
+  canMoveUp: boolean;
+  /** False on the last pot. */
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onToggleCollapse: () => void;
   onUpdatePot: (patch: Partial<BudgetPot>) => void;
   onDeletePot: () => void;
@@ -47,6 +53,10 @@ function finaliseNumber(raw: string): number {
 export function PotCard({
   pot,
   collapsed,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   onToggleCollapse,
   onUpdatePot,
   onDeletePot,
@@ -250,6 +260,33 @@ export function PotCard({
               {statusText}
             </span>
           )}
+
+          <span className="pot-reorder">
+            <button
+              className="pot-move-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
+              disabled={!canMoveUp}
+              aria-label="Move pot up"
+              title="Move up"
+            >
+              ▴
+            </button>
+            <button
+              className="pot-move-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
+              disabled={!canMoveDown}
+              aria-label="Move pot down"
+              title="Move down"
+            >
+              ▾
+            </button>
+          </span>
 
           <button className="pot-delete-btn" onClick={onDeletePot} title="Delete pot">
             ×

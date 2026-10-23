@@ -340,6 +340,31 @@ button {
   color: var(--text);
 }
 
+/* Pot reordering. Arrows rather than drag and drop, because the list is used
+   as often on the phone as on the desktop and a drag target that small is a
+   fight. Disabled at the ends instead of hidden, so the row never reflows. */
+.pot-reorder {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+.pot-move-btn {
+  background: none;
+  border: 0.5px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pot-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .pot-delete-btn {
   background: none;
   border: 0.5px solid var(--border);

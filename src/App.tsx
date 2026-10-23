@@ -651,6 +651,32 @@ export default function App() {
     if (data) setPots((prev) => [...prev, { ...data, items: [] }]);
   }
 
+  // Move a pot one place up or down the list.
+  //
+  // sort_order is renumbered across every pot rather than swapping the pair,
+  // because pots made before ordering mattered can all sit at 0, and swapping
+  // two zeroes moves nothing. Writes go through the same debounced patch queue
+  // as every other edit, so the order survives a refresh.
+  function movePot(potId: string, direction: -1 | 1) {
+    markLocalEdit();
+    setPots((prev) => {
+      const index = prev.findIndex((p) => p.id === potId);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= prev.length) return prev;
+
+      const reordered = [...prev];
+      [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+
+      return reordered.map((pot, i) => {
+        if (pot.sort_order === i) return pot;
+        const existing = pendingPotPatches.current.get(pot.id) ?? {};
+        pendingPotPatches.current.set(pot.id, { ...existing, sort_order: i });
+        return { ...pot, sort_order: i };
+      });
+    });
+    scheduleFlush();
+  }
+
   function updatePotLocal(potId: string, patch: Partial<BudgetPot>) {
     markLocalEdit();
     setPots((prev) => prev.map((p) => (p.id === potId ? { ...p, ...patch } : p)));
@@ -1029,11 +1055,15 @@ export default function App() {
         </div>
       )}
 
-      {pots.map((pot) => (
+      {pots.map((pot, potIndex) => (
         <PotCard
           key={pot.id}
           pot={pot}
           collapsed={collapsedPots.has(pot.id)}
+          canMoveUp={potIndex > 0}
+          canMoveDown={potIndex < pots.length - 1}
+          onMoveUp={() => movePot(pot.id, -1)}
+          onMoveDown={() => movePot(pot.id, 1)}
           onToggleCollapse={() => togglePotCollapse(pot.id)}
           onUpdatePot={(patch) => updatePotLocal(pot.id, patch)}
           onDeletePot={() => { void deletePotLocal(pot.id); }}
