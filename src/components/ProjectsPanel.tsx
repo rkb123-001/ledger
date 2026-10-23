@@ -39,6 +39,13 @@ export function ProjectsPanel({
   onChanged,
 }: ProjectsPanelProps) {
   const [showArchived, setShowArchived] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("ledger.projects.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -57,6 +64,21 @@ export function ProjectsPanel({
         return byStatus !== 0 ? byStatus : a.sort_order - b.sort_order;
       });
   }, [projects, showArchived]);
+
+  // Collapsing only hides; it never changes what is loaded or counted.
+  const shown = collapsed ? [] : visible;
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("ledger.projects.collapsed", next ? "1" : "0");
+      } catch {
+        // Private browsing, or storage disabled. The toggle still works for this visit.
+      }
+      return next;
+    });
+  }
 
   const confidence = confidenceFromSamples(closedJobCount);
 
@@ -104,14 +126,30 @@ export function ProjectsPanel({
     <section className="projects-panel" aria-label="Projects">
       <div className="projects-header">
         <div>
-          <h2 className="projects-title">Projects</h2>
-          <div className="projects-subtitle" title={CONFIDENCE_LABELS[confidence]}>
-            {predictionFactor === 1
-              ? "Predictions uncalibrated until three jobs have closed"
-              : `Predictions scaled by ${predictionFactor.toFixed(2)}x from ${closedJobCount} closed jobs`}
-          </div>
+          <button
+            type="button"
+            className="panel-toggle"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Show projects" : "Hide projects"}
+          >
+            <span className="panel-caret" aria-hidden="true">
+              {collapsed ? "\u25B8" : "\u25BE"}
+            </span>
+            <h2 className="projects-title">Projects</h2>
+            {collapsed && visible.length > 0 && (
+              <span className="panel-count">{visible.length}</span>
+            )}
+          </button>
+          {!collapsed && (
+            <div className="projects-subtitle" title={CONFIDENCE_LABELS[confidence]}>
+              {predictionFactor === 1
+                ? "Predictions uncalibrated until three jobs have closed"
+                : `Predictions scaled by ${predictionFactor.toFixed(2)}x from ${closedJobCount} closed jobs`}
+            </div>
+          )}
         </div>
-        <div className="projects-actions">
+        <div className="projects-actions" hidden={collapsed}>
           <button className="add-btn" onClick={() => setShowArchived((v) => !v)}>
             {showArchived ? "Hide archived" : "Show archived"}
           </button>
@@ -121,13 +159,13 @@ export function ProjectsPanel({
         </div>
       </div>
 
-      {visible.length === 0 && (
+      {!collapsed && visible.length === 0 && (
         <p className="projects-empty">
           No projects yet. Add one, then assign costs to it from any pot.
         </p>
       )}
 
-      {visible.map((project) => {
+      {shown.map((project) => {
         const rollup = rollupById.get(project.id);
         const figures = {
           budget_amount: project.budget_amount,

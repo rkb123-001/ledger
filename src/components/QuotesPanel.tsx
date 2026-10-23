@@ -35,6 +35,13 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
   const [costDraft, setCostDraft] = useState("");
   const [hoursDraft, setHoursDraft] = useState("");
   const [showClosed, setShowClosed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("ledger.quotes.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -589,20 +596,46 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
     );
   }
 
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("ledger.quotes.collapsed", next ? "1" : "0");
+      } catch {
+        // Private browsing, or storage disabled. The toggle still works for this visit.
+      }
+      return next;
+    });
+  }
+
   if (quotes === null) return null;
 
   return (
     <div className="quotes-panel">
       <div className="quotes-header">
-        <h2 className="quotes-title">Quotes</h2>
-        {closed.length > 0 && (
+        <button
+          type="button"
+          className="panel-toggle"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          title={collapsed ? "Show quotes" : "Hide quotes"}
+        >
+          <span className="panel-caret" aria-hidden="true">
+            {collapsed ? "\u25B8" : "\u25BE"}
+          </span>
+          <h2 className="quotes-title">Quotes</h2>
+          {collapsed && open.length > 0 && (
+            <span className="panel-count">{open.length}</span>
+          )}
+        </button>
+        {!collapsed && closed.length > 0 && (
           <button className="draft-reject" onClick={() => setShowClosed((s) => !s)}>
             {showClosed ? "Hide closed" : `Show closed (${closed.length})`}
           </button>
         )}
       </div>
 
-      <div className="quotes-sub">
+      <div className="quotes-sub" hidden={collapsed}>
         {drift
           ? `Estimates run ${drift.median.toFixed(2)}× actual over ${drift.sample} closed ${
               drift.sample === 1 ? "job" : "jobs"
@@ -616,16 +649,16 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
           : "Close a job with what it actually cost, and quotes start correcting themselves against your own history. Three closes before any correction is applied."}
       </div>
 
-      {error && <div className="upload-status upload-error">{error}</div>}
+      {!collapsed && error && <div className="upload-status upload-error">{error}</div>}
 
-      {open.length === 0 && closed.length === 0 && (
+      {!collapsed && open.length === 0 && closed.length === 0 && (
         <div className="quotes-empty">
           No quotes yet. Cost an order and choose Save quote only, or Add to pots as drafts.
         </div>
       )}
 
-      {open.map(renderRow)}
-      {showClosed && closed.map(renderRow)}
+      {!collapsed && open.map(renderRow)}
+      {!collapsed && showClosed && closed.map(renderRow)}
     </div>
   );
 }

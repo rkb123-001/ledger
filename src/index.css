@@ -1469,6 +1469,46 @@ button {
   margin: 0;
 }
 
+/* Collapse toggles on the Projects and Quotes panels. The whole title is the
+   hit area, so it works on a phone without a separate tap target. */
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.panel-toggle:focus-visible {
+  outline: 2px solid var(--accent, #6b7280);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.panel-caret {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  width: 10px;
+  flex: 0 0 10px;
+}
+
+.panel-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
 .projects-subtitle {
   font-size: 12px;
   color: var(--text-tertiary);
