@@ -2156,12 +2156,28 @@ button {
    the other prices work not yet taken on. Side by side makes that parallel
    legible and stops each eating a full band of the page. */
 
+/* The two intake tools sit under one collapse, because they are both
+   "put something new into the ledger" and are not needed most visits. */
+.intake-section {
+  margin-bottom: 1rem;
+}
+
+.intake-header {
+  margin-bottom: 8px;
+}
+
+.intake-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
 .intake-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   align-items: start;
-  margin-bottom: 1rem;
 }
 
 .intake-row > .upload-section {

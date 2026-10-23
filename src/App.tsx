@@ -70,6 +70,14 @@ export default function App() {
   const [pots, setPots] = useState<PotWithItems[]>([]);
   const [drafts, setDrafts] = useState<BudgetDraft[]>([]);
   const [loading, setLoading] = useState(true);
+  const [intakeCollapsed, setIntakeCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("ledger.intake.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
   const [collapsedPots, setCollapsedPots] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(COLLAPSED_KEY);
@@ -651,6 +659,18 @@ export default function App() {
     if (data) setPots((prev) => [...prev, { ...data, items: [] }]);
   }
 
+  function toggleIntake() {
+    setIntakeCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("ledger.intake.collapsed", next ? "1" : "0");
+      } catch {
+        // Private browsing, or storage disabled. The toggle still works for this visit.
+      }
+      return next;
+    });
+  }
+
   // Move a pot one place up or down the list.
   //
   // sort_order is renumbered across every pot rather than swapping the pair,
@@ -1007,9 +1027,28 @@ export default function App() {
         />
       )}
 
-      <div className="intake-row">
-        <ScreenshotUpload onParsed={async () => { await flushAll(); fetchAll(); }} />
-        <OrderCosting pots={pots} onCommitted={async () => { await flushAll(); fetchAll(); }} />
+      <div className="intake-section">
+        <div className="intake-header">
+          <button
+            type="button"
+            className="panel-toggle"
+            onClick={toggleIntake}
+            aria-expanded={!intakeCollapsed}
+            title={intakeCollapsed ? "Show intake tools" : "Hide intake tools"}
+          >
+            <span className="panel-caret" aria-hidden="true">
+              {intakeCollapsed ? "\u25b8" : "\u25be"}
+            </span>
+            <h2 className="intake-title">Add new costs</h2>
+          </button>
+        </div>
+
+        {!intakeCollapsed && (
+          <div className="intake-row">
+            <ScreenshotUpload onParsed={async () => { await flushAll(); fetchAll(); }} />
+            <OrderCosting pots={pots} onCommitted={async () => { await flushAll(); fetchAll(); }} />
+          </div>
+        )}
       </div>
 
       {userId && (
