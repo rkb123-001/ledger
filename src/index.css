@@ -1494,6 +1494,52 @@ button {
   margin: 0;
 }
 
+/* Page tabs. Sticky, because on the phone the pot list is long enough that
+   getting back to the other pages otherwise means scrolling to the top. */
+.tab-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 10px;
+  margin-bottom: 4px;
+  background: var(--bg);
+}
+
+.tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: 0.5px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  color: var(--text);
+  font-weight: 600;
+  background: var(--panel);
+  border-color: var(--text-tertiary);
+}
+
+.tab-badge {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
 /* Collapse toggles on the Projects and Quotes panels. The whole title is the
    hit area, so it works on a phone without a separate tap target. */
 .panel-toggle {

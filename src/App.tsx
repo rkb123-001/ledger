@@ -64,12 +64,43 @@ interface RebalanceMove {
   amount: number;
 }
 
+type Tab = "overview" | "pots" | "work";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "pots", label: "Pots" },
+  { id: "work", label: "Work" },
+];
+
+function isTab(value: string): value is Tab {
+  return value === "overview" || value === "pots" || value === "work";
+}
+
+function readTabFromHash(): Tab | null {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  return isTab(raw) ? raw : null;
+}
+
+function readSavedTab(): Tab {
+  try {
+    const saved = localStorage.getItem("ledger.tab");
+    if (saved && isTab(saved)) return saved;
+  } catch {
+    // Private browsing, or storage disabled.
+  }
+  return "overview";
+}
+
 export default function App() {
   const { session, loading: authLoading } = useAuth();
   const [account, setAccount] = useState<BudgetAccount | null>(null);
   const [pots, setPots] = useState<PotWithItems[]>([]);
   const [drafts, setDrafts] = useState<BudgetDraft[]>([]);
   const [loading, setLoading] = useState(true);
+  // Which page is showing. The hash wins over the remembered tab, so a link or
+  // a back button lands where it says, and the app reopens where it was left.
+  const [tab, setTab] = useState<Tab>(() => readTabFromHash() ?? readSavedTab());
+
   const [intakeCollapsed, setIntakeCollapsed] = useState(() => {
     try {
       return localStorage.getItem("ledger.intake.collapsed") === "1";
@@ -659,6 +690,26 @@ export default function App() {
     if (data) setPots((prev) => [...prev, { ...data, items: [] }]);
   }
 
+  function selectTab(next: Tab) {
+    setTab(next);
+    try {
+      localStorage.setItem("ledger.tab", next);
+    } catch {
+      // Private browsing, or storage disabled.
+    }
+    if (readTabFromHash() !== next) window.location.hash = next;
+  }
+
+  // The phone's back gesture should move between tabs rather than leaving the app.
+  useEffect(() => {
+    function onHashChange() {
+      const fromHash = readTabFromHash();
+      if (fromHash) setTab(fromHash);
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   function toggleIntake() {
     setIntakeCollapsed((v) => {
       const next = !v;
@@ -910,6 +961,24 @@ export default function App() {
         </div>
       </div>
 
+      <nav className="tab-bar" aria-label="Sections">
+        {TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            className={`tab-btn ${tab === id ? "active" : ""}`}
+            aria-current={tab === id ? "page" : undefined}
+            onClick={() => selectTab(id)}
+          >
+            {label}
+            {id === "pots" && drafts.length > 0 && (
+              <span className="tab-badge">{drafts.length}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "overview" && (
+      <>
       {bankAccounts !== null && userId ? (
         <AccountsPanel
           accounts={bankAccounts}
@@ -1016,6 +1085,11 @@ export default function App() {
         </div>
       </div>
 
+      </>
+      )}
+
+      {tab === "work" && (
+      <>
       {bankAccounts !== null && userId && (
         <ProjectsPanel
           projects={projects}
@@ -1062,6 +1136,11 @@ export default function App() {
         />
       )}
 
+      </>
+      )}
+
+      {tab === "pots" && (
+      <>
       <DraftsReview drafts={drafts} pots={pots} onAccepted={async () => { await flushAll(); fetchAll(); }} />
 
       {rebalanceMoves.length > 0 && (
@@ -1192,6 +1271,9 @@ export default function App() {
             No external transfers needed once the pot moves above are applied.
           </div>
         </div>
+      )}
+
+      </>
       )}
 
       {showProductionCosts && (
