@@ -67,9 +67,9 @@ interface RebalanceMove {
 type Tab = "overview" | "pots" | "work";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "work", label: "Work" },
   { id: "overview", label: "Overview" },
   { id: "pots", label: "Pots" },
-  { id: "work", label: "Work" },
 ];
 
 function isTab(value: string): value is Tab {
@@ -88,7 +88,7 @@ function readSavedTab(): Tab {
   } catch {
     // Private browsing, or storage disabled.
   }
-  return "overview";
+  return "work";
 }
 
 export default function App() {
