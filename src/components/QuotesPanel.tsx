@@ -6,7 +6,7 @@
 // pinned at 1.0 no matter how many jobs went through. This panel is the missing
 // return path.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import type { OrderQuote, BudgetPot, CostedPiece } from "../lib/types";
 import { fmt } from "../lib/format";
@@ -34,6 +34,8 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
   const [editPieces, setEditPieces] = useState<CostedPiece[]>([]);
   const [costDraft, setCostDraft] = useState("");
   const [hoursDraft, setHoursDraft] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [note, setNote] = useState<string | null>(null);
   // Set while a hand-written quote is being typed for the first time. Cancelling
   // that edit removes the row, so an abandoned "New quote" leaves nothing behind.
   const [unsavedNewId, setUnsavedNewId] = useState<string | null>(null);
@@ -186,6 +188,99 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
     setEditPieces((prev) => prev.filter((_, i) => i !== pi));
   }
 
+  // A quote costed from a screenshot, without going through the intake panel.
+  // The enquiry usually arrives as a DM or an email on the phone, where a
+  // screenshot is the only practical way to get it into the app.
+  //
+  // The costed quote is saved first and opened in the editor, rather than
+  // reviewed in a second screen: everything needed to check it is already in
+  // this editor, and Cancel discards it, so nothing is kept unless confirmed.
+  async function quoteFromImage(file: File) {
+    setBusy(true);
+    setError(null);
+    setNote("Reading the screenshot\u2026");
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not signed in");
+
+      setNote("Costing the order\u2026");
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const res = await fetch(`${supabaseUrl}/functions/v1/cost-order`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: base64,
+          mediaType: file.type || "image/png",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || "Costing failed");
+
+      const pieces: CostedPiece[] = data.pieces ?? [];
+      if (pieces.length === 0) {
+        throw new Error("Nothing costable was found in that screenshot");
+      }
+
+      // Totals are recomputed here rather than trusted from the model, the same
+      // rule the costing panel follows.
+      const subtotal = pieces.reduce(
+        (sum, p) =>
+          sum +
+          (p.breakdown ?? []).reduce((s, l) => s + Number(l.amount || 0), 0) *
+            (p.quantity || 1),
+        0
+      );
+      const multiplier = Number(data.margin_multiplier ?? 4);
+      const retail = Math.ceil((subtotal * multiplier) / 5) * 5;
+
+      const { data: row, error: err } = await supabase
+        .from("budget_order_quotes")
+        .insert({
+          user_id: userId,
+          client_name: data.client_name || null,
+          order_reference: data.order_reference || null,
+          pieces,
+          production_subtotal: subtotal,
+          suggested_retail: retail,
+          margin_multiplier: multiplier,
+          status: "saved",
+          committed_to_pots: false,
+        })
+        .select()
+        .single();
+
+      if (err || !row) throw new Error(err?.message ?? "Could not save the quote");
+
+      setCollapsed(false);
+      await fetchQuotes();
+      const saved = row as Row;
+      startEdit(saved);
+      setUnsavedNewId(saved.id);
+      setNote(
+        `Costed ${pieces.length} ${pieces.length === 1 ? "piece" : "pieces"}. Check it, then save.`
+      );
+      onChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setNote(null);
+    } finally {
+      setBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   // A quote written by hand, for work that never arrived as an email to cost.
   // It is created empty and opened straight in the editor, so there is only one
   // place in the app where a quote's lines get typed.
@@ -286,6 +381,7 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
     setEditingId(null);
     setUnsavedNewId(null);
     setError(null);
+    setNote(null);
     await fetchQuotes();
     onChanged?.();
   }
@@ -347,6 +443,7 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
   // nothing has been typed into it worth keeping.
   async function cancelEdit(q: Row) {
     setEditingId(null);
+    setNote(null);
     if (unsavedNewId !== q.id) return;
 
     setUnsavedNewId(null);
@@ -753,6 +850,24 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
         </button>
         {!collapsed && (
           <div className="quotes-header-actions">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void quoteFromImage(file);
+              }}
+            />
+            <button
+              className="add-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+              title="Cost a quote from a screenshot of the enquiry"
+            >
+              From screenshot
+            </button>
             <button
               className="add-btn"
               onClick={createBlankQuote}
@@ -784,11 +899,12 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
           : "Close a job with what it actually cost, and quotes start correcting themselves against your own history. Three closes before any correction is applied."}
       </div>
 
+      {!collapsed && note && <div className="upload-status">{note}</div>}
       {!collapsed && error && <div className="upload-status upload-error">{error}</div>}
 
       {!collapsed && open.length === 0 && closed.length === 0 && (
         <div className="quotes-empty">
-          No quotes yet. Cost an order from an email, or write one by hand with New quote.
+          No quotes yet. Cost one from a screenshot of the enquiry, or write one by hand.
         </div>
       )}
 

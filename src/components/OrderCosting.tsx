@@ -288,8 +288,7 @@ export function OrderCosting({ pots, onCommitted }: OrderCostingProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
-          capture="environment"
+          accept="image/*"
           style={{ display: "none" }}
           onChange={(e) => {
             const file = e.target.files?.[0];

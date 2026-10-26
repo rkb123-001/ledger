@@ -1938,7 +1938,8 @@ button {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .quotes-title {
@@ -1951,6 +1952,7 @@ button {
   display: flex;
   gap: 8px;
   margin-left: auto;
+  flex-wrap: wrap;
 }
 
 .quote-add-line,
