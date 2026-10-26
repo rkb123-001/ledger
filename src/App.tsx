@@ -101,6 +101,16 @@ export default function App() {
   // a back button lands where it says, and the app reopens where it was left.
   const [tab, setTab] = useState<Tab>(() => readTabFromHash() ?? readSavedTab());
 
+  // The phone's back gesture should move between tabs rather than leaving the app.
+  useEffect(() => {
+    function onHashChange() {
+      const fromHash = readTabFromHash();
+      if (fromHash) setTab(fromHash);
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   const [intakeCollapsed, setIntakeCollapsed] = useState(() => {
     try {
       return localStorage.getItem("ledger.intake.collapsed") === "1";
@@ -699,16 +709,6 @@ export default function App() {
     }
     if (readTabFromHash() !== next) window.location.hash = next;
   }
-
-  // The phone's back gesture should move between tabs rather than leaving the app.
-  useEffect(() => {
-    function onHashChange() {
-      const fromHash = readTabFromHash();
-      if (fromHash) setTab(fromHash);
-    }
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
 
   function toggleIntake() {
     setIntakeCollapsed((v) => {
