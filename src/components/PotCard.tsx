@@ -15,6 +15,8 @@ interface PotCardProps {
   onUpdatePot: (patch: Partial<BudgetPot>) => void;
   onDeletePot: () => void;
   onAddItem: () => Promise<BudgetItem | null>;
+  /** Delete every item already ticked as paid in this pot. */
+  onClearPaid: () => void;
   onUpdateItem: (itemId: string, patch: Partial<BudgetItem>) => void;
   onDeleteItem: (itemId: string) => void;
 }
@@ -61,6 +63,7 @@ export function PotCard({
   onUpdatePot,
   onDeletePot,
   onAddItem,
+  onClearPaid,
   onUpdateItem,
   onDeleteItem,
 }: PotCardProps) {
@@ -122,7 +125,11 @@ export function PotCard({
     });
   }, [pot.id, pot.name, pot.current_balance, pot.items, editingPotName, editingItem]);
 
-  const potTotal = pot.items.reduce((s, i) => s + Number(i.amount), 0);
+  const potTotal = pot.items.reduce(
+    (s, i) => s + (i.paid ? 0 : Number(i.amount)),
+    0
+  );
+  const paidCount = pot.items.filter((i) => i.paid).length;
   const diff = Number(pot.current_balance) - potTotal;
   const statusClass = diff >= 0 ? (diff > 0 ? "overfunded" : "ok") : "shortfall";
   const statusText = diff >= 0 ? (diff > 0 ? `+${fmt(diff)}` : "Exact") : `−${fmt(diff)}`;
@@ -337,7 +344,7 @@ export function PotCard({
                   />
                 ) : (
                   <span
-                    className={`item-label ${isEst ? "est" : ""}`}
+                    className={`item-label ${isEst ? "est" : ""} ${item.paid ? "paid" : ""}`}
                     onClick={() => startEditingItemLabel(item)}
                   >
                     {item.label}
@@ -345,6 +352,15 @@ export function PotCard({
                 )}
 
                 <div className="item-controls">
+                  <button
+                    className={`item-paid ${item.paid ? "on" : ""}`}
+                    onClick={() => onUpdateItem(item.id, { paid: !item.paid })}
+                    aria-pressed={item.paid}
+                    title={item.paid ? "Paid. Click to mark unpaid" : "Mark as paid"}
+                  >
+                    {item.paid ? "\u2713" : ""}
+                  </button>
+
                   <input
                     className="item-amount-input"
                     type="text"
@@ -387,9 +403,16 @@ export function PotCard({
             );
           })}
 
-          <button className="add-btn" onClick={handleAddItem}>
-            + Add item
-          </button>
+          <div className="pot-item-actions">
+            <button className="add-btn" onClick={handleAddItem}>
+              + Add item
+            </button>
+            {paidCount > 0 && (
+              <button className="add-btn" onClick={onClearPaid}>
+                Clear paid ({paidCount})
+              </button>
+            )}
+          </div>
 
           <div className="pot-total">
             <span>Total needed</span>

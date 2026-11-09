@@ -37,6 +37,8 @@ export interface BudgetItem {
    * is built to keep working in that state rather than throw.
    */
   project_id?: string | null;
+  /** The quote this cost came from (migration 011). Null for anything typed by hand. */
+  source_quote_id?: string | null;
   sort_order: number;
   created_at: string;
 }
@@ -50,6 +52,8 @@ export interface BudgetDraft {
   amount: number;
   is_estimate: boolean;
   status: "pending" | "accepted" | "rejected";
+  /** The quote this draft came from (migration 011). */
+  source_quote_id?: string | null;
   created_at: string;
 }
 

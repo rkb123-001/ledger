@@ -574,7 +574,12 @@ export default function App() {
     const shortfalls: { id: string; name: string; amount: number }[] = [];
 
     pots.forEach((pot) => {
-      const potTotal = pot.items.reduce((s, i) => s + Number(i.amount), 0);
+      // Paid items are money already gone. They stay visible until cleared,
+      // but they stop counting as something the pot still has to cover.
+      const potTotal = pot.items.reduce(
+        (s, i) => s + (i.paid ? 0 : Number(i.amount)),
+        0
+      );
       totalNeeded += potTotal;
       const diff = Number(pot.current_balance) - potTotal;
       if (diff > 0) surplus.push({ id: pot.id, name: pot.name, amount: diff });
@@ -754,6 +759,29 @@ export default function App() {
     const existing = pendingPotPatches.current.get(potId) ?? {};
     pendingPotPatches.current.set(potId, { ...existing, ...patch });
     scheduleFlush();
+  }
+
+  // Remove every settled item in one pot at once, for the tidy-up after a
+  // month's payments have gone out.
+  async function clearPaidItems(potId: string) {
+    if (!userId) return;
+    const pot = pots.find((p) => p.id === potId);
+    const paidItems = pot?.items.filter((i) => i.paid) ?? [];
+    if (paidItems.length === 0) return;
+
+    const total = paidItems.reduce((s, i) => s + Number(i.amount || 0), 0);
+    if (
+      !window.confirm(
+        `Delete ${paidItems.length} paid ${
+          paidItems.length === 1 ? "item" : "items"
+        } worth ${fmt(total)} from ${pot?.name ?? "this pot"}? The pot balance is not changed.`
+      )
+    )
+      return;
+
+    for (const item of paidItems) {
+      await deleteItemLocal(potId, item.id);
+    }
   }
 
   async function deletePotLocal(potId: string) {
@@ -1186,6 +1214,7 @@ export default function App() {
           onUpdatePot={(patch) => updatePotLocal(pot.id, patch)}
           onDeletePot={() => { void deletePotLocal(pot.id); }}
           onAddItem={() => addItemToPot(pot.id)}
+          onClearPaid={() => { void clearPaidItems(pot.id); }}
           onUpdateItem={(itemId, patch) => updateItemLocal(pot.id, itemId, patch)}
           onDeleteItem={(itemId) => { void deleteItemLocal(pot.id, itemId); }}
         />

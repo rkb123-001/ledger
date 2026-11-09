@@ -409,6 +409,7 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
           amount: total,
           is_estimate: true,
           status: "pending",
+          source_quote_id: q.id,
         });
       }
     }
@@ -465,13 +466,51 @@ export function QuotesPanel({ userId, pots, onChanged }: QuotesPanelProps) {
 
   async function deleteQuote(q: Row) {
     const who = q.client_name || q.order_reference || "this quote";
-    if (
-      !window.confirm(
-        `Delete the quote for ${who}? Any drafts or pot items already created from it are left alone.`
-      )
-    )
-      return;
+
+    // Costs this quote put into the pots. Asked about separately, because
+    // deleting the quote and abandoning the job are not the same decision.
+    const { data: linkedItems } = await supabase
+      .from("budget_items")
+      .select("id, label, amount")
+      .eq("user_id", userId)
+      .eq("source_quote_id", q.id);
+    const linked = linkedItems ?? [];
+
+    if (!window.confirm(`Delete the quote for ${who}?`)) return;
+
+    let removeCosts = false;
+    if (linked.length > 0) {
+      const total = linked.reduce((s, i) => s + Number(i.amount || 0), 0);
+      removeCosts = window.confirm(
+        `This quote put ${linked.length} ${
+          linked.length === 1 ? "cost" : "costs"
+        } worth ${fmt(total)} into your pots.\n\nOK removes them too, for a job that is not happening.\nCancel keeps them, and deletes only the quote.`
+      );
+    }
+
     setBusy(true);
+
+    if (removeCosts) {
+      const { error: itemErr } = await supabase
+        .from("budget_items")
+        .delete()
+        .eq("user_id", userId)
+        .eq("source_quote_id", q.id);
+      if (itemErr) {
+        setBusy(false);
+        setError("Could not remove the pot costs: " + itemErr.message);
+        return;
+      }
+    }
+
+    // Drafts from this quote that were never reviewed go either way, since an
+    // unreviewed suggestion for a deleted quote is noise.
+    await supabase
+      .from("budget_drafts")
+      .delete()
+      .eq("user_id", userId)
+      .eq("source_quote_id", q.id);
+
     const { error: err } = await supabase
       .from("budget_order_quotes")
       .delete()

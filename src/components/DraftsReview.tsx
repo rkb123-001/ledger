@@ -60,6 +60,8 @@ export function DraftsReview({ drafts, pots, onAccepted }: DraftsReviewProps) {
       amount: edit.amount,
       is_estimate: edit.is_estimate,
       sort_order: nextSort,
+      // Keeps the trail from quote to pot item, so abandoning a job can undo it.
+      source_quote_id: draft.source_quote_id ?? null,
     });
 
     if (insertError) {

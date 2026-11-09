@@ -6,8 +6,16 @@
 # page renders, hangs, and refuses to log in. That cost an afternoon to
 # diagnose on 23 October 2026.
 #
-# One cheap read every three days is enough to count as activity. The query
-# asks for a single id and no rows beyond the first, so it moves almost no data.
+# A read every three days was NOT enough. Between 25 October and 1 November
+# every scheduled run returned HTTP 200 from a select against budget_pots, and
+# Supabase paused the project anyway on 4 November, seven days after the last
+# real use of the app. An RLS-filtered read that returns an empty array does
+# not appear to register as activity.
+#
+# So this now writes: one row updated daily through the ping_heartbeat()
+# function added in migration 012. A write cannot be mistaken for an idle
+# database. Daily rather than every third day, because the pause window is
+# seven days and three strikes should be possible before anything is lost.
 #
 # Needs two repository secrets, under Settings > Secrets and variables >
 # Actions:
@@ -21,9 +29,9 @@ name: Keep Supabase awake
 
 on:
   schedule:
-    # 07:14 UTC every third day. An odd minute on purpose: the hour and the
-    # half hour are heavily contended on GitHub's shared runners and get queued.
-    - cron: "14 7 */3 * *"
+    # 07:14 UTC daily. An odd minute on purpose: the hour and the half hour
+    # are heavily contended on GitHub's shared runners and get queued.
+    - cron: "14 7 * * *"
   workflow_dispatch:
 
 jobs:
@@ -49,19 +57,24 @@ jobs:
           # is for a signed-in user's token, and sending the publishable key in
           # it gets the whole request rejected as an invalid key.
           code=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 30 \
-            "$SUPABASE_URL/rest/v1/budget_pots?select=id&limit=1" \
-            -H "apikey: $SUPABASE_ANON_KEY")
+            -X POST "$SUPABASE_URL/rest/v1/rpc/ping_heartbeat" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}')
 
           echo "HTTP $code"
           head -c 300 /tmp/body; echo
 
-          # RLS means an unauthenticated read returns an empty array, not rows.
-          # 200 with [] is the healthy answer: the database was reached and
-          # answered. Anything else means it is paused, unreachable, or the key
-          # has been rotated.
+          # 200 returns the new timestamp, which is proof a row was written
+          # rather than merely read. 404 means migration 012 has not been run
+          # on this project, which is the one failure the old version could not
+          # have produced and so is worth naming.
           # Distinguish the causes rather than blaming the pause for everything.
           case "$code" in
             200) ;;
+            404)
+              echo "::error::ping_heartbeat() is missing (HTTP 404). Run supabase/migrations/012_heartbeat.sql in the SQL editor."
+              exit 1 ;;
             401|403)
               echo "::error::Supabase rejected the key (HTTP $code). The project is awake but SUPABASE_ANON_KEY is wrong. Re-copy the publishable key from .env.local or the dashboard."
               exit 1 ;;
@@ -73,4 +86,4 @@ jobs:
               exit 1 ;;
           esac
 
-          echo "Supabase is awake."
+          echo "Supabase is awake, and the heartbeat row was written."

@@ -340,6 +340,38 @@ button {
   color: var(--text);
 }
 
+/* Marking a cost paid. A tick rather than a checkbox, so the row reads the
+   same whether the cost is outstanding or settled. */
+.item-paid {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--success-text);
+  background: none;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.item-paid.on {
+  background: var(--success-bg);
+  border-color: var(--success-text);
+}
+
+.item-label.paid {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+.pot-item-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Pot reordering. Arrows rather than drag and drop, because the list is used
    as often on the phone as on the desktop and a drag target that small is a
    fight. Disabled at the ends instead of hidden, so the row never reflows. */
